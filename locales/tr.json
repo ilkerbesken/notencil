@@ -244,8 +244,16 @@
     "pwa_update_desc": "Değişiklikleri görmek için yenileyin.",
     "pwa_refresh_now": "Şimdi Yenile",
     "lang_tr": "Türkçe",
-    "lang_en": "English",
-    "lang_de": "Deutsch",
-    "lang_fr": "Français",
-    "lang_es": "Español"
+    "lang_en": "Ingilizce",
+    "lang_de": "Almanca",
+    "lang_fr": "Fransızca",
+    "lang_es": "İspanyolca",
+    "about": "Hakkında",
+    "sort_folders": "Klasörleri Sırala",
+    "sort_notes": "Notları Sırala",
+    "sort_by_name": "İsme Göre Sırala",
+    "sort_by_size": "Boyuta Göre Sırala",
+    "sort_by_date": "Tarihe Göre Sırala",
+    "ascending": "Artan",
+    "descending": "Azalan"
 }

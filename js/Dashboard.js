@@ -18,6 +18,11 @@ class Dashboard {
         this.btnEmptyTrash = document.getElementById('btnEmptyTrash');
         this.btnSelectAll = document.getElementById('btnSelectAll');
         this.btnSelectAllMobile = document.getElementById('btnSelectAllMobile');
+        this.btnSortFolders = document.getElementById('btnSortFolders');
+        this.btnSortFoldersHeader = document.getElementById('btnSortFoldersHeader');
+        this.sortFoldersDropdown = document.getElementById('sortFoldersDropdown');
+        this.btnSortNotes = document.getElementById('btnSortNotes');
+        this.sortOptionsDropdown = document.getElementById('sortOptionsDropdown');
         this.loader = document.getElementById('dashboardLoader');
 
 
@@ -73,6 +78,9 @@ class Dashboard {
         this.viewSettings = await this.loadDataAsync('wb_view_settings', { gridSize: 'xsmall', rememberLastPage: true, autosaveInterval: '3000', darkTheme: false });
         this.sidebarCollapsed = await this.loadDataAsync('wb_sidebar_collapsed', false);
         this.expandedFolders = await this.loadDataAsync('wb_expanded_folders', []);
+        this.folderSortOrder = await this.loadDataAsync('wb_folder_sort_order', 'none'); // 'none', 'asc', 'desc'
+        this.boardSortField = await this.loadDataAsync('wb_board_sort_field', 'date'); // 'name', 'date', 'size'
+        this.boardSortOrder = await this.loadDataAsync('wb_board_sort_order', 'desc'); // 'asc', 'desc'
         this.customCovers = await this.loadDataAsync('wb_custom_covers', []);
 
         this.applyTheme();
@@ -352,6 +360,7 @@ class Dashboard {
 
             // Initialize Bulk Actions Logic
             this.setupBulkActions();
+            this.setupSortActions();
 
             this.updateBreadcrumbPath(this.currentView);
         } catch (err) {
@@ -452,7 +461,12 @@ class Dashboard {
         }
 
         // Dynamic Folders Tree
-        const rootFolders = this.folders.filter(f => !f.parentId);
+        let rootFolders = this.folders.filter(f => !f.parentId);
+        if (this.folderSortOrder === 'asc') {
+            rootFolders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        } else if (this.folderSortOrder === 'desc') {
+            rootFolders.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+        }
         this.renderFolderTree(rootFolders, this.folderList, 0);
 
         // On mobile, render notes that don't have a folder at the end of the list
@@ -701,8 +715,7 @@ class Dashboard {
                     dropdown.classList.remove('show');
                 };
             });
-
-            dropdown.querySelectorAll('.icon-option').forEach(opt => {
+dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 opt.onclick = (e) => {
                     e.stopPropagation();
                     this.changeFolderIcon(folder.id, opt.dataset.icon);
@@ -718,9 +731,23 @@ class Dashboard {
                 childContainer.className = 'folder-children';
                 container.appendChild(childContainer);
 
+                // Render subfolders
+                let children = this.folders.filter(f => f.parentId === folder.id);
+                if (this.folderSortOrder === 'asc') {
+                    children.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+                } else if (this.folderSortOrder === 'desc') {
+                    children.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+                }
+                this.renderFolderTree(children, childContainer, level + 1);
+
                 // Render notes under this folder if on mobile
                 if (this.isMobile()) {
                     const folderNotes = this.boards.filter(b => b.folderId === folder.id && !b.deleted);
+                    if (this.folderSortOrder === 'asc') {
+                        folderNotes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+                    } else if (this.folderSortOrder === 'desc') {
+                        folderNotes.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+                    }
                     folderNotes.forEach(note => {
                         const noteItem = document.createElement('div');
                         noteItem.className = `tree-note-item ${this.currentBoardId === note.id ? 'active' : ''}`;
@@ -799,14 +826,6 @@ class Dashboard {
 
                         childContainer.appendChild(noteItem);
                     });
-
-
-                }
-
-                // Render children
-                const children = this.folders.filter(f => f.parentId === folder.id);
-                if (children.length > 0) {
-                    this.renderFolderTree(children, childContainer, level + 1);
                 }
             }
         });
@@ -840,6 +859,21 @@ class Dashboard {
             } else {
                 filtered = base;
             }
+        }
+
+        // Apply custom sorting if specified
+        if (this.boardSortField === 'name') {
+            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+                ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) 
+                : b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+        } else if (this.boardSortField === 'date') {
+            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+                ? a.lastModified - b.lastModified 
+                : b.lastModified - a.lastModified);
+        } else if (this.boardSortField === 'size') {
+            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+                ? (a.objectCount || 0) - (b.objectCount || 0) 
+                : (b.objectCount || 0) - (a.objectCount || 0));
         }
 
         // Apply Search Filter
@@ -1212,6 +1246,9 @@ class Dashboard {
                 tabTitle.textContent = window.i18n.t('storage');
                 updateStorageUI();
             }
+            else if (tabId === 'about') {
+                tabTitle.textContent = window.i18n.t('about') || 'Notencil Hakkında';
+            }
         };
 
         // Language changed listener to update dynamic parts
@@ -1224,6 +1261,7 @@ class Dashboard {
             }
             else if (activeTab === 'workspace') tabTitle.textContent = window.i18n.t('workspace');
             else if (activeTab === 'storage') tabTitle.textContent = window.i18n.t('storage');
+            else if (activeTab === 'about') tabTitle.textContent = window.i18n.t('about') || 'Notencil Hakkında';
             
             this.renderBoards();
             this.renderSidebar();
@@ -2041,7 +2079,7 @@ class Dashboard {
         this.app.render();
     }
 
-    async saveCurrentBoard(force = false) {
+    async saveCurrentBoard(force = false, skipHeavy = false) {
         const boardId = this.currentBoardId;
         if (!boardId) return;
 
@@ -2060,7 +2098,8 @@ class Dashboard {
 
             // 1. Sync current page state (skip clone if we serialize immediately)
             if (this.app.pageManager) {
-                this.app.pageManager.saveCurrentPageState(force, !force); 
+                // Skip thumbnail generation during fast switch
+                this.app.pageManager.saveCurrentPageState(force && !skipHeavy, !force); 
             }
 
             // 2. Prepare board meta (Snapshot for async save)
@@ -2070,7 +2109,7 @@ class Dashboard {
                 const board = this.boards[boardIndex];
                 const now = Date.now();
 
-                const shouldUpdatePreview = force || !board._lastPreviewTime || (now - board._lastPreviewTime > 60000);
+                const shouldUpdatePreview = !skipHeavy && (force || !board._lastPreviewTime || (now - board._lastPreviewTime > 60000));
                 if (shouldUpdatePreview) {
                     try {
                         board.preview = this.app.canvas.toDataURL('image/webp', 0.4);
@@ -3481,6 +3520,129 @@ class Dashboard {
         overlay.onclick = (e) => {
             if (e.target === overlay) overlay.remove();
         };
+    }
+
+    setupSortActions() {
+        if (!this.btnSortFolders || !this.btnSortNotes) return;
+
+        // Folder sorting dropdown toggle
+        const toggleFoldersDropdown = (e) => {
+            e.stopPropagation();
+            const isOpen = this.sortFoldersDropdown.classList.contains('show');
+            
+            // Close other dropdowns
+            document.querySelectorAll('.view-options-dropdown, .sort-options-dropdown, .sort-folders-dropdown').forEach(d => d.classList.remove('show'));
+            
+            if (!isOpen) {
+                this.sortFoldersDropdown.classList.add('show');
+            }
+        };
+
+        if (this.btnSortFolders) this.btnSortFolders.onclick = toggleFoldersDropdown;
+        if (this.btnSortFoldersHeader) this.btnSortFoldersHeader.onclick = toggleFoldersDropdown;
+
+        // Folder sort buttons
+        this.sortFoldersDropdown.querySelectorAll('.sort-folders-btn').forEach(btn => {
+            btn.onclick = () => {
+                // Currently folders only sort by name
+                this.updateSortUI();
+            };
+        });
+
+        this.sortFoldersDropdown.querySelectorAll('.order-folders-btn').forEach(btn => {
+            btn.onclick = async () => {
+                this.folderSortOrder = btn.dataset.order;
+                await this.saveDataAsync('wb_folder_sort_order', this.folderSortOrder);
+                this.updateSortUI();
+                this.renderSidebar();
+            };
+        });
+
+        // Note sorting dropdown toggle
+        this.btnSortNotes.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = this.sortOptionsDropdown.classList.contains('show');
+            
+            // Close other dropdowns
+            document.querySelectorAll('.view-options-dropdown, .sort-options-dropdown, .sort-folders-dropdown').forEach(d => d.classList.remove('show'));
+            
+            if (!isOpen) {
+                this.sortOptionsDropdown.classList.add('show');
+            }
+        };
+
+        // Close dropdowns when clicking outside
+        const closeDropdownListener = (e) => {
+            if (this.sortFoldersDropdown && !this.sortFoldersDropdown.contains(e.target) && 
+                (!this.btnSortFolders || !this.btnSortFolders.contains(e.target)) &&
+                (!this.btnSortFoldersHeader || !this.btnSortFoldersHeader.contains(e.target))) {
+                this.sortFoldersDropdown.classList.remove('show');
+            }
+            if (this.sortOptionsDropdown && !this.sortOptionsDropdown.contains(e.target) && !this.btnSortNotes.contains(e.target)) {
+                this.sortOptionsDropdown.classList.remove('show');
+            }
+        };
+        document.addEventListener('click', closeDropdownListener);
+
+        // Board sort buttons
+        this.sortOptionsDropdown.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.onclick = async () => {
+                this.boardSortField = btn.dataset.sort;
+                await this.saveDataAsync('wb_board_sort_field', this.boardSortField);
+                this.updateSortUI();
+                this.renderBoards();
+            };
+        });
+
+        // Board order buttons
+        this.sortOptionsDropdown.querySelectorAll('.order-btn').forEach(btn => {
+            btn.onclick = async () => {
+                this.boardSortOrder = btn.dataset.order;
+                await this.saveDataAsync('wb_board_sort_order', this.boardSortOrder);
+                this.updateSortUI();
+                this.renderBoards();
+            };
+        });
+
+        this.updateSortUI();
+    }
+
+    updateSortUI() {
+        if (!this.sortOptionsDropdown) return;
+        
+        // Update active classes for board sort buttons
+        this.sortOptionsDropdown.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.sort === this.boardSortField);
+        });
+
+        this.sortOptionsDropdown.querySelectorAll('.order-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.order === this.boardSortOrder);
+        });
+
+        // Update active classes for folder sort buttons
+        if (this.sortFoldersDropdown) {
+            this.sortFoldersDropdown.querySelectorAll('.order-folders-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.order === this.folderSortOrder);
+            });
+        }
+
+        // Update folder sort button active state
+        const isFolderSorted = this.folderSortOrder !== 'none';
+        this.btnSortFolders?.classList.toggle('active', isFolderSorted);
+        this.btnSortFoldersHeader?.classList.toggle('active', isFolderSorted);
+        
+        // Update folder sort icons based on state
+        const updateFolderIcon = (btn) => {
+            if (!btn) return;
+            const icon = btn.querySelector('app-icon');
+            if (icon) {
+                if (this.folderSortOrder === 'asc') icon.setAttribute('name', 'arrow-up');
+                else if (this.folderSortOrder === 'desc') icon.setAttribute('name', 'arrow-down');
+                else icon.setAttribute('name', 'switch-vertical-01');
+            }
+        };
+        updateFolderIcon(this.btnSortFolders);
+        updateFolderIcon(this.btnSortFoldersHeader);
     }
 
     setupSelectAll() {

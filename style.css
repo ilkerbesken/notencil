@@ -163,10 +163,10 @@ textarea,
     text-align: center;
 }
 
-.segmented-control input[type="radio"]:checked + .segment-label {
+.segmented-control input[type="radio"]:checked+.segment-label {
     background: var(--bg-secondary);
     color: var(--text-primary);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 #app {
@@ -1180,8 +1180,13 @@ input[type="range"] {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @media (max-width: 600px) {
@@ -1192,17 +1197,20 @@ input[type="range"] {
         max-height: 100vh;
         border-radius: 0;
     }
+
     .settings-sidebar {
         width: 100%;
         height: auto;
         border-right: none;
         border-bottom: 1px solid #eee;
     }
+
     .settings-sidebar-items {
         flex-direction: row;
         overflow-x: auto;
         padding: 8px;
     }
+
     .settings-sidebar-item {
         flex-direction: column;
         padding: 8px;
@@ -2958,7 +2966,7 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
         position: fixed !important;
         top: 0;
         left: 0;
-        width: 280px !important;
+        width: 320px !important;
         height: 100vh !important;
         z-index: 9001 !important;
         background: var(--sidebar-bg);
@@ -2971,11 +2979,13 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 
     .dashboard-sidebar.collapsed {
         transform: translateX(-100%);
-        width: 280px !important; /* Keep width same on mobile even when collapsed */
+        width: 320px !important;
+        /* Keep width same on mobile even when collapsed */
     }
 
     .sidebar-toggle-btn {
-        display: flex !important; /* Show toggle btn inside sidebar on mobile too */
+        display: flex !important;
+        /* Show toggle btn inside sidebar on mobile too */
     }
 
     .dashboard-main {
@@ -3269,7 +3279,7 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
         display: none;
     }
 
-    .toolbar-left > * {
+    .toolbar-left>* {
         flex-shrink: 0;
     }
 
@@ -3469,7 +3479,7 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 
     /* Keep zoom controls inside status-bar but ensure visibility */
     .status-bar .zoom-controls {
-    position: static;
+        position: static;
         display: flex;
         background: transparent;
         border: none;
@@ -4021,7 +4031,7 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 }
 
 .dashboard-sidebar {
-    width: 260px;
+    width: 320px;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -4068,6 +4078,10 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 .dashboard-sidebar.collapsed .workspace-header {
     justify-content: center;
     padding: 8px 0;
+}
+
+.dashboard-sidebar.collapsed .workspace-header>div:first-child {
+    display: none !important;
 }
 
 .dashboard-sidebar.collapsed .folder-item {
@@ -4127,16 +4141,17 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 
 
 .workspace-header .avatar {
-    width: 32px;
-    height: 32px;
+    min-width: 24px;
+    min-height: 24px;
     background: var(--app-icon-color);
     color: white;
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-family: 'Fraunces', serif;
     font-weight: 800;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 .workspace-name {
@@ -4497,7 +4512,7 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
     height: 40px;
     border-radius: 8px;
     background: transparent;
-    border: 1px solid var(--border-color);
+    border: 0 solid var(--border-color);
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -5224,8 +5239,10 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 
 .view-options-dropdown {
     position: absolute;
-    top: 60px; /* Below dashboard header */
-    right: 32px; /* Margin from right */
+    top: 60px;
+    /* Below dashboard header */
+    right: 32px;
+    /* Margin from right */
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -5252,9 +5269,91 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
         top: auto;
         width: auto;
         min-width: 0;
-        z-index: 10001; /* Higher than sidebar overlay */
+        z-index: 10001;
+        /* Higher than sidebar overlay */
         box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
     }
+}
+
+.sort-options-dropdown,
+.sort-folders-dropdown {
+    position: absolute;
+    top: 60px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    min-width: 220px;
+    display: none;
+    padding: 16px;
+    z-index: 2000;
+    animation: dropdownFade 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-primary);
+}
+
+.sort-options-dropdown {
+    right: 80px;
+}
+
+.sort-folders-dropdown {
+    left: 20px;
+    top: 200px;
+}
+
+.sort-options-dropdown.show,
+.sort-folders-dropdown.show {
+    display: block;
+}
+
+@media (max-width: 768px) {
+
+    .sort-options-dropdown,
+    .sort-folders-dropdown {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        top: auto;
+        width: auto;
+        min-width: 0;
+        z-index: 10001;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
+    }
+}
+
+.sort-buttons,
+.sort-order-buttons {
+    display: flex;
+    gap: 6px;
+    background: var(--bg-primary);
+    padding: 4px;
+    border-radius: 8px;
+}
+
+.sort-btn,
+.sort-folders-btn,
+.order-btn,
+.order-folders-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 8px 4px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.sort-btn.active,
+.sort-folders-btn.active,
+.order-btn.active,
+.order-folders-btn.active {
+    background: var(--bg-secondary);
+    color: var(--app-icon-active-color);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
 .option-group {
