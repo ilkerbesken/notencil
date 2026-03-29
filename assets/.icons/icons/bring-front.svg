@@ -1,0 +1,14 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="bring-front">
+<g id="send-back" clip-path="url(#clip0_2319_831)">
+<g id="g7149">
+<path id="path7145" d="M15.3 10.55V4.85M15.3 4.85L18.15 7.7M15.3 4.85L12.45 7.7M13.4 13.7705V20.05C13.4 20.5763 12.9763 21 12.45 21H2.95C2.4237 21 2 20.5763 2 20.05V10.55C2 10.0237 2.4237 9.6 2.95 9.6H9.20504M20.05 13.4H10.55C10.0237 13.4 9.6 12.9763 9.6 12.45V2.95C9.6 2.4237 10.0237 2 10.55 2H20.05C20.5763 2 21 2.4237 21 2.95V12.45C21 12.9763 20.5763 13.4 20.05 13.4Z" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_2319_831">
+<rect width="24" height="24" fill="white" transform="matrix(-1 0 0 -1 24 24)"/>
+</clipPath>
+</defs>
+</svg>

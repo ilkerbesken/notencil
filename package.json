@@ -1,0 +1,41 @@
+{
+  "name": "notencil",
+  "version": "1.0.0",
+  "description": "Profesyonel Dijital Beyaz Tahta ve Not Alma Uygulaması",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:web": "echo 'Web sürümü hazır.'",
+    "dist": "electron-builder"
+  },
+  "author": "notencil",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.notencil.app",
+    "productName": "notencil",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist",
+      "!node_modules",
+      "!.github",
+      "!test_script.js",
+      "!tab-test.html"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

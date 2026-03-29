@@ -1,0 +1,16 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\.ncil]
+@="notencil.Note"
+"Content Type"="application/x-notencil"
+"PerceivedType"="document"
+
+[HKEY_CLASSES_ROOT\notencil.Note]
+@="Notencil Not Dosyası"
+"FriendlyTypeName"="Notencil Not Dosyası"
+
+[HKEY_CLASSES_ROOT\notencil.Note\DefaultIcon]
+@="C:\\Path\\To\\notencil\\assets\\icons\\dot-ncil.ico"
+
+[HKEY_CLASSES_ROOT\notencil.Note\shell\open\command]
+@="\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --app=\"https://notencil.app/?file=%1\""
