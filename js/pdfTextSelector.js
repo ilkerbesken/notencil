@@ -313,6 +313,21 @@ class PDFTextSelector {
     }
 
     /**
+     * Evict a specific page's text layer from DOM to save memory
+     * @param {number} pageIndex 
+     */
+    evictLayer(pageIndex) {
+        if (this.textLayers.has(pageIndex)) {
+            const div = this.textLayers.get(pageIndex);
+            if (div && div.parentNode) {
+                div.remove();
+            }
+            this.textLayers.delete(pageIndex);
+            console.log(`[PDFTextSelector] Evicted text layer for page ${pageIndex + 1}`);
+        }
+    }
+
+    /**
      * Highlight selected PDF text with highlighter tool
      */
     highlightSelectedText() {

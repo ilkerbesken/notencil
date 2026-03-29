@@ -244,5 +244,13 @@
     "lang_en": "Englisch",
     "lang_de": "Deutsch",
     "lang_fr": "Französisch",
-    "lang_es": "Spanisch"
+    "lang_es": "Spanisch",
+    "about": "Über",
+    "sort_folders": "Ordner sortieren",
+    "sort_notes": "Notizen sortieren",
+    "sort_by_name": "Nach Name sortieren",
+    "sort_by_size": "Nach Größe sortieren",
+    "sort_by_date": "Nach Datum sortieren",
+    "ascending": "Aufsteigend",
+    "descending": "Absteigend"
 }

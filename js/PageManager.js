@@ -342,8 +342,15 @@ class PageManager {
      * Tüm sayfaların küçük resimlerini yenile (Asenkron ve parça parça)
      */
     refreshAllThumbnails() {
+        if (this._isRefreshingThumbnails) return;
+        
+        const sidebarVisible = this.sidebar && !this.sidebar.classList.contains('collapsed');
+        if (!sidebarVisible) return;
+
         const total = this.pages.length;
         if (total === 0) return;
+
+        this._isRefreshingThumbnails = true;
 
         // 1. Önce aktif sayfanınkini hemen yap (Kullanıcı görsün)
         this.updatePageThumbnail(this.currentPageIndex, true, false);
@@ -351,6 +358,11 @@ class PageManager {
         // 2. Kalanları arka planda yap (İşlemciyi yormamak için)
         let index = 0;
         const processBatch = () => {
+            if (!this.app.pdfManager) {
+                this._isRefreshingThumbnails = false;
+                return;
+            }
+
             const batchSize = 2; // Her adımda 2 sayfa işle
             const end = Math.min(index + batchSize, total);
 
@@ -364,15 +376,16 @@ class PageManager {
                 if (window.requestIdleCallback) {
                     window.requestIdleCallback(processBatch, { timeout: 2000 });
                 } else {
-                    setTimeout(processBatch, 100);
+                    setTimeout(processBatch, 150);
                 }
             } else {
+                this._isRefreshingThumbnails = false;
                 this.renderPageList();
             }
         };
 
         // Gecikmeli başlat
-        setTimeout(processBatch, 200);
+        setTimeout(processBatch, 300);
     }
 
     deletePage(index, event) {

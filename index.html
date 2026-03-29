@@ -6,8 +6,10 @@
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>notencil - Profesyonel Dijital Beyaz Tahta</title>
-    <meta name="description" content="notencil, profesyonel dijital beyaz tahta ve not alma uygulamasıdır. Notlarınızı organize edin, çizim yapın ve paylaşın.">
-    <meta name="keywords" content="beyaz tahta, dijital notlar, notencil, çizim, planlama, üretkenlik, not alma, whiteboard">
+    <meta name="description"
+        content="notencil, profesyonel dijital beyaz tahta ve not alma uygulamasıdır. Notlarınızı organize edin, çizim yapın ve paylaşın.">
+    <meta name="keywords"
+        content="beyaz tahta, dijital notlar, notencil, çizim, planlama, üretkenlik, not alma, whiteboard">
     <meta name="author" content="notencil">
     <link rel="canonical" href="https://ilkerbesken.github.io/notencil/">
 
@@ -19,14 +21,16 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://ilkerbesken.github.io/notencil/">
     <meta property="og:title" content="notencil - Profesyonel Dijital Beyaz Tahta">
-    <meta property="og:description" content="Profesyonel dijital beyaz tahta ve not alma deneyimi. Notlarınızı özgürce oluşturun.">
+    <meta property="og:description"
+        content="Profesyonel dijital beyaz tahta ve not alma deneyimi. Notlarınızı özgürce oluşturun.">
     <meta property="og:image" content="https://ilkerbesken.github.io/notencil/assets/favicon/favicon.svg">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://ilkerbesken.github.io/notencil/">
     <meta property="twitter:title" content="notencil - Profesyonel Dijital Beyaz Tahta">
-    <meta property="twitter:description" content="Profesyonel dijital beyaz tahta ve not alma deneyimi. Notlarınızı özgürce oluşturun.">
+    <meta property="twitter:description"
+        content="Profesyonel dijital beyaz tahta ve not alma deneyimi. Notlarınızı özgürce oluşturun.">
     <meta property="twitter:image" content="https://ilkerbesken.github.io/notencil/assets/favicon/favicon.svg">
 
     <!-- GEO Tags -->
@@ -89,7 +93,9 @@
     <link rel="stylesheet" href="style.css?v=0.8.4">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/template-gallery.css?v=0.8.1">
     <link rel="stylesheet" href="calendar.css?v=1.0.0">
 
@@ -120,11 +126,15 @@
                     <span class="workspace-name"></span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 4px;">
-                    
+
                     <button id="btnSidebarToggle" class="sidebar-toggle-btn" data-i18n-title="close">
                         <app-icon name="sidebar-left" class="toggle-icon"></app-icon>
                     </button>
-
+                    <!--
+                    <button id="btnSortFoldersHeader" class="sidebar-action-btn" data-i18n-title="sort_folders">
+                        <app-icon name="switch-vertical-01" class="toggle-icon" style="opacity: 0.6;"></app-icon>
+                    </button>
+                    -->
                     <button id="btnSidebarNewBoard" class="sidebar-new-board-btn" data-i18n-title="new_note">
                         <app-icon name="file-plus-03" class="toggle-icon"></app-icon>
                     </button>
@@ -136,7 +146,8 @@
             <div class="mobile-dashboard-actions mobile-only">
                 <div class="search-bar">
                     <app-icon name="select" class="search-icon" style="opacity: 0.5;"></app-icon>
-                    <input type="text" placeholder="Notlarda ara..." id="mobileSearchInput" data-i18n="search_placeholder">
+                    <input type="text" placeholder="Notlarda ara..." id="mobileSearchInput"
+                        data-i18n="search_placeholder">
                     <button class="search-clear-btn" id="mobileSearchClear" style="display: none;">✕</button>
                 </div>
                 <div class="mobile-action-buttons">
@@ -154,7 +165,7 @@
                     <button id="btnOpenTemplatesMobile" class="mobile-action-btn" data-i18n-title="templates">
                         <app-icon name="table" alt="templates"></app-icon>
                     </button>
-                    
+
                 </div>
             </div>
 
@@ -170,8 +181,8 @@
                     </div>
                 </div>
                 <div class="nav-section">
-                    <div class="section-title" 
-                    style="margin-top: auto; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
+                    <div class="section-title"
+                        style="margin-top: auto; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
                         <span data-i18n="collections">KOLEKSİYONLAR</span>
                     </div>
                     <div class="nav-item" data-view="favorites">
@@ -184,13 +195,18 @@
                     </div>
                 </div>
                 <div class="nav-section">
-                    <div class="section-title"
-                        style="display: flex; justify-content: space-between; align-items: center;
+                    <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;
                         margin-top: auto; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
                         <span data-i18n="folders">KLASÖRLER</span>
-                        <button id="btnNewFolder" class="sidebar-action-btn" data-i18n-title="new_folder">
-                            <span style="font-size: 16px;">+</span>
-                        </button>
+                        <div style="display: flex; gap: 4px;">
+                            <button id="btnSortFolders" class="sidebar-action-btn" data-i18n-title="sort_folders">
+                                <app-icon name="switch-vertical-01" class="icon-tiny"
+                                    style="width: 14px; height: 14px; opacity: 0.6;"></app-icon>
+                            </button>
+                            <button id="btnNewFolder" class="sidebar-action-btn" data-i18n-title="new_folder">
+                                <span style="font-size: 16px;">+</span>
+                            </button>
+                        </div>
                     </div>
                     <div id="folderList">
                         <!-- Dynamic folders will be listed here -->
@@ -224,8 +240,8 @@
                 </div>
 
                 <div class="header-action-group">
-                    <button id="btnEmptyTrash" class="btn btn-danger"
-                        style="display: none;" data-i18n="empty_trash">Çöp Kutusunu Boşalt</button>
+                    <button id="btnEmptyTrash" class="btn btn-danger" style="display: none;" data-i18n="empty_trash">Çöp
+                        Kutusunu Boşalt</button>
 
                     <div class="secondary-actions">
                         <button id="btnSelectAll" class="btn-icon" data-i18n-title="select_all">
@@ -240,13 +256,40 @@
                             <app-icon name="file-download-03" alt="import"></app-icon>
                         </button>
                         <button id="btnOpenTemplates" class="btn-icon" data-i18n-title="templates">
-                        <app-icon name="table" alt="templates"></app-icon>
-                    </button>
+                            <app-icon name="table" alt="templates"></app-icon>
+                        </button>
+                        <button id="btnSortNotes" class="btn-icon" data-i18n-title="sort_notes">
+                            <app-icon name="filter-funnel-01" alt="sort"></app-icon>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Sort Folders Dropdown -->
+            <div id="sortFoldersDropdown" class="sort-folders-dropdown">
+                <div class="option-group">
+                    <div class="sort-buttons">
+                        <button class="sort-folders-btn active" data-sort="name">
+                            <span data-i18n="sort_by_name">İsme Göre Sırala</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="sort-order-buttons">
+                        <button class="order-folders-btn active" data-order="asc">
+                            <span data-i18n="ascending">Artan</span>
+                        </button>
+                        <button class="order-folders-btn" data-order="desc">
+                            <span data-i18n="descending">Azalan</span>
+                        </button>
+                        <button class="order-folders-btn" data-order="none">
+                            <span>-</span>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </header>
 
-            <!-- Navigation Path Row -->
+            <!-- Sort Options Dropdown (Boards) -->
             <div id="breadcrumbPathRow" class="breadcrumb-path-row" style="display: none;">
                 <div class="path-container">
                     <app-icon name="folder-01" class="path-icon"></app-icon>
@@ -261,11 +304,13 @@
                     <span style="margin-right: 12px; font-size: 18px;">
                         <app-icon name="folder-01" alt="folder"></app-icon>
                     </span>
-                    <span data-i18n="storage_alert"><strong>Kayıt Klasörüne Erişilemiyor:</strong> Dosyalarınızı senkronize etmek için klasör
+                    <span data-i18n="storage_alert"><strong>Kayıt Klasörüne Erişilemiyor:</strong> Dosyalarınızı
+                        senkronize etmek için klasör
                         erişim izni vermeniz gerekiyor.</span>
                 </div>
                 <button id="btnGrantStoragePermission" class="btn btn-warning"
-                    style="height: 32px; padding: 0 15px; font-size: 13px;" data-i18n="grant_permission">Erişime İzin Ver</button>
+                    style="height: 32px; padding: 0 15px; font-size: 13px;" data-i18n="grant_permission">Erişime İzin
+                    Ver</button>
             </div>
 
             <!-- Bulk Actions Toolbar -->
@@ -305,11 +350,16 @@
                 <div class="option-group">
                     <label data-i18n="view_settings">Görünüm Ayarları</label>
                     <div class="size-buttons">
-                        <button class="size-btn" data-size="mini" data-i18n-title="size_mini" data-i18n="size_mini">En Küçük</button>
-                        <button class="size-btn" data-size="xsmall" data-i18n-title="size_xsmall" data-i18n="size_xsmall">Daha Küçük</button>
-                        <button class="size-btn" data-size="small" data-i18n-title="size_small" data-i18n="size_small">Küçük</button>
-                        <button class="size-btn" data-size="medium" data-i18n-title="size_medium" data-i18n="size_medium">Orta</button>
-                        <button class="size-btn" data-size="large" data-i18n-title="size_large" data-i18n="size_large">Büyük</button>
+                        <button class="size-btn" data-size="mini" data-i18n-title="size_mini" data-i18n="size_mini">En
+                            Küçük</button>
+                        <button class="size-btn" data-size="xsmall" data-i18n-title="size_xsmall"
+                            data-i18n="size_xsmall">Daha Küçük</button>
+                        <button class="size-btn" data-size="small" data-i18n-title="size_small"
+                            data-i18n="size_small">Küçük</button>
+                        <button class="size-btn" data-size="medium" data-i18n-title="size_medium"
+                            data-i18n="size_medium">Orta</button>
+                        <button class="size-btn" data-size="large" data-i18n-title="size_large"
+                            data-i18n="size_large">Büyük</button>
                     </div>
                 </div>
 
@@ -338,6 +388,24 @@
                         <button id="btnResetIconColor" class="btn btn-secondary">
                             <app-icon name="refresh-ccw-01" alt="view" class="icon-small"></app-icon>
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sort-options-dropdown" id="sortOptionsDropdown">
+                <div class="option-group">
+                    <label data-i18n="sort_notes">Notları Sırala</label>
+                    <div class="sort-buttons">
+                        <button class="sort-btn" data-sort="name" data-i18n="sort_by_name">İsim</button>
+                        <button class="sort-btn" data-sort="date" data-i18n="sort_by_date">Tarih</button>
+                        <button class="sort-btn" data-sort="size" data-i18n="sort_by_size">Boyut</button>
+                    </div>
+                </div>
+                <div class="option-group"
+                    style="margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                    <div class="sort-order-buttons">
+                        <button class="order-btn" data-order="asc" data-i18n="ascending">Artan</button>
+                        <button class="order-btn" data-order="desc" data-i18n="descending">Azalan</button>
                     </div>
                 </div>
             </div>
@@ -396,8 +464,7 @@
                     <app-icon name="home-02" alt="home"></app-icon>
                 </div>
 
-                <div id="leftToolbarExtra"
-                    style="display: none; align-items: center; gap: 4px; flex-wrap: nowrap;">
+                <div id="leftToolbarExtra" style="display: none; align-items: center; gap: 4px; flex-wrap: nowrap;">
 
                     <button class="tool-btn" id="btnAddPage" data-i18n-title="add_page">
                         <app-icon name="file-plus-03" alt="add-page"></app-icon>
@@ -429,7 +496,8 @@
 
             <div class="toolbar-center">
                 <div class="tool-group">
-                    <button class="tool-btn toolbar-orient-btn" id="btnToolbarOrient" data-i18n-title="toggle_toolbar_orient">
+                    <button class="tool-btn toolbar-orient-btn" id="btnToolbarOrient"
+                        data-i18n-title="toggle_toolbar_orient">
                         <app-icon name="compass-03" alt="toolbar"></app-icon>
                     </button>
 
@@ -1572,10 +1640,12 @@
             <span>Kaydet</span>
             <span class="shortcut">Ctrl+S</span>
         </div>
+        <!--
         <div class="menu-item" id="menuOpenNcil">
             <app-icon name="folder-open" class="icon-small"></app-icon>
             <span>notencil Dosyası Aç (.ncil)</span>
         </div>
+        -->
         <div class="menu-item" id="menuSaveNcil">
             <app-icon name="save-01" class="icon-small"></app-icon>
             <span>notencil Olarak Kaydet (.ncil)</span>
@@ -1680,8 +1750,8 @@
             <div class="settings-content-wrapper">
                 <div class="settings-content-header">
                     <div class="template-search-container" style="flex: 1; margin-right: 16px;">
-                        <input type="text" id="templateSearchInput" placeholder="Şablon ara..." 
-                               style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); outline: none;">
+                        <input type="text" id="templateSearchInput" placeholder="Şablon ara..."
+                            style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); outline: none;">
                     </div>
                     <button class="settings-modal-close" id="btnCloseTemplateModal">×</button>
                 </div>
@@ -1759,6 +1829,10 @@
                         <app-icon name="database-01" class="nav-icon"></app-icon>
                         <span data-i18n="storage">Depolama</span>
                     </div>
+                    <div class="settings-sidebar-item" data-tab="about">
+                        <app-icon name="info-circle" class="nav-icon"></app-icon>
+                        <span data-i18n="about">Hakkında</span>
+                    </div>
                 </div>
             </div>
             <div class="settings-content-wrapper">
@@ -1774,8 +1848,10 @@
                                 <app-icon name="sun" style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 <span data-i18n="theme_and_appearance">Tema ve Görünüm</span>
                             </p>
-                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;" data-i18n="appearance_desc">Uygulama genelindeki görünüm ayarlarını buradan değiştirebilirsiniz.</p>
-                            
+                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;"
+                                data-i18n="appearance_desc">Uygulama genelindeki görünüm ayarlarını buradan
+                                değiştirebilirsiniz.</p>
+
                             <div class="settings-item-row">
                                 <span data-i18n="dark_theme">Koyu Tema</span>
                                 <label class="switch">
@@ -1785,12 +1861,15 @@
                             </div>
                         </div>
 
-                        <div class="form-group" style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
+                        <div class="form-group"
+                            style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
                             <p class="settings-section-label">
-                                <app-icon name="grid-01" style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
+                                <app-icon name="grid-01"
+                                    style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 <span data-i18n="dashboard_appearance">Dashboard Görünümü</span>
                             </p>
-                            <div class="settings-item-row" style="flex-direction: column; align-items: flex-start; gap: 12px;">
+                            <div class="settings-item-row"
+                                style="flex-direction: column; align-items: flex-start; gap: 12px;">
                                 <span data-i18n="card_size">Kart Boyutu</span>
                                 <div id="gridSizeOptions" class="segmented-control" style="width: 100%;">
                                     <label>
@@ -1817,10 +1896,12 @@
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <input type="color" id="settingsIconColorPicker" value="#616161"
                                         style="width: 36px; height: 32px; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px; background: var(--bg-primary); cursor: pointer;">
-                                    <button id="btnSettingsApplyIconColor" class="btn btn-primary" style="padding: 0 10px; height: 32px;" data-i18n-title="apply">
+                                    <button id="btnSettingsApplyIconColor" class="btn btn-primary"
+                                        style="padding: 0 10px; height: 32px;" data-i18n-title="apply">
                                         <app-icon name="check" class="icon-small" style="color:white;"></app-icon>
                                     </button>
-                                    <button id="btnSettingsResetIconColor" class="btn btn-secondary" style="padding: 0 10px; height: 32px;" data-i18n-title="reset">
+                                    <button id="btnSettingsResetIconColor" class="btn btn-secondary"
+                                        style="padding: 0 10px; height: 32px;" data-i18n-title="reset">
                                         <app-icon name="refresh-ccw-01" class="icon-small"></app-icon>
                                     </button>
                                 </div>
@@ -1832,7 +1913,8 @@
                     <div class="settings-tab-content" id="tab-language">
                         <div class="form-group">
                             <p class="settings-section-label">
-                                <app-icon name="globe-01" style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
+                                <app-icon name="globe-01"
+                                    style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 <span data-i18n="language_selection">Dil Seçimi</span>
                             </p>
                             <div id="languageList" class="language-list">
@@ -1863,7 +1945,8 @@
                         <!-- ── Bölüm 1: Yerel Klasör (Masaüstü / Android) ── -->
                         <div class="form-group" id="local-storage-section">
                             <p class="settings-section-label">
-                                <app-icon name="server-03" style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
+                                <app-icon name="server-03"
+                                    style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 <span data-i18n="local_storage">Yerel Depolama</span>
                             </p>
 
@@ -1872,7 +1955,8 @@
                                     <app-icon name="folder" style="width: 14px; opacity: 0.7;"></app-icon>
                                 </div>
                                 <div class="status-info">
-                                    <div id="currentStorageLocation" class="status-value" data-i18n="browser_storage">Tarayıcı Depolaması</div>
+                                    <div id="currentStorageLocation" class="status-value" data-i18n="browser_storage">
+                                        Tarayıcı Depolaması</div>
                                 </div>
                             </div>
 
@@ -1910,7 +1994,8 @@
                                     style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 Google Drive Senkronizasyonu
                             </p>
-                            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
+                            <p
+                                style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
                                 Notlarınızı Google Drive'a yedekleyin veya farklı cihazlardan erişin.
                             </p>
 
@@ -1932,13 +2017,17 @@
                                     Google hesabından çıkış yap
                                 </button>
                             </div>
-                            <p id="gdrive-status" style="font-size: 12px; color: var(--text-secondary); margin-top: 10px; min-height: 18px;"></p>
+                            <p id="gdrive-status"
+                                style="font-size: 12px; color: var(--text-secondary); margin-top: 10px; min-height: 18px;">
+                            </p>
                         </div>
 
                         <!-- ── Bölüm 3: Otomatik Kayıt Ayarları ── -->
-                        <div class="form-group" style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
+                        <div class="form-group"
+                            style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
                             <p class="settings-section-label">
-                                <app-icon name="save-01" style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
+                                <app-icon name="save-01"
+                                    style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
                                 Otomatik Kayıt
                             </p>
                             <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -1962,6 +2051,41 @@
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">
                                     Değişikliklerin ne sıklıkla kaydedileceğini seçin.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- About Tab -->
+                    <div class="settings-tab-content" id="tab-about">
+                        <div class="form-group" style="text-align: center; padding: 20px 0;">
+                            <div class="about-app-icon" style="margin-bottom: 20px;">
+                                <img src="assets/favicon/favicon.svg" alt="notencil"
+                                    style="width: 80px; height: 80px; border-radius: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            </div>
+                            <h3 style="margin: 10px 0 5px 0;">notencil</h3>
+                            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 30px;">Versiyon
+                                1.0.0</p>
+
+                            <div class="about-links"
+                                style="display: flex; flex-direction: column; gap: 12px; max-width: 300px; margin: 0 auto;">
+                                <a href="https://github.com/ilkerbesken/notencil" target="_blank"
+                                    class="btn btn-outline" style="justify-content: center; gap: 8px;">
+                                    <app-icon name="code-browser" style="width: 16px; opacity: 0.7;"></app-icon>
+                                    GitHub Sayfası
+                                </a>
+                                <a href="https://github.com/ilkerbesken/notencil/releases" target="_blank"
+                                    class="btn btn-secondary" style="justify-content: center; gap: 8px;">
+                                    <app-icon name="download-01" style="width: 16px; opacity: 0.7;"></app-icon>
+                                    Yeni Sürüm İndir
+                                </a>
+                            </div>
+
+                            <div
+                                style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                                    notencil, özgür ve açık kaynaklı bir projedir.<br>
+                                    Apache-2.0 Lisansı ile lisanslanmıştır.
                                 </p>
                             </div>
                         </div>

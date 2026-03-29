@@ -10,6 +10,8 @@ class PDFManager {
         this.currentUrl = null;
         this.isLoaded = false;
         this.pageBuffers = new Map(); // Stores offscreen canvases for each page
+        this.bufferAccessOrder = []; // To implement LRU eviction
+        this.maxBuffers = 15; // Keep only 15 high-res pages in memory
         this.loadingBuffers = new Set(); // To prevent redundant concurrent loads
 
         // PDF.js settings
@@ -33,42 +35,60 @@ class PDFManager {
             this.currentUrl = url;
             const loadingTask = pdfjsLib.getDocument(url);
             this.pdfDoc = await loadingTask.promise;
-            this.pageBuffers.clear();
+            
+            this.clearBuffers();
             if (this.textSelector) this.textSelector.clear();
 
             console.log(`PDF loaded: ${this.pdfDoc.numPages} pages`);
-            this.isLoaded = true; // Set early to allow rendering if needed
+            this.isLoaded = true;
 
             if (this.app.pageManager) {
-                // Populate a temporary array first to avoid partial state during async loading
                 const newPages = [];
+                const numPages = this.pdfDoc.numPages;
 
-                for (let i = 1; i <= this.pdfDoc.numPages; i++) {
-                    const pdfPage = await this.pdfDoc.getPage(i);
-                    // Use scale 1.5 or 2.0 for better quality when zooming
-                    const viewport = pdfPage.getViewport({ scale: 2.0 });
+                // Optimization: Fetch page dimensions in parallel batches to avoid main-thread blocking
+                const batchSize = 10;
+                for (let i = 1; i <= numPages; i += batchSize) {
+                    const batchPromises = [];
+                    for (let j = i; j < i + batchSize && j <= numPages; j++) {
+                        batchPromises.push(this.pdfDoc.getPage(j));
+                    }
+                    
+                    const pages = await Promise.all(batchPromises);
+                    pages.forEach((pdfPage, index) => {
+                        const pageNum = i + index;
+                        const viewport = pdfPage.getViewport({ scale: 1.0 });
 
-                    newPages.push({
-                        id: Date.now() + i + Math.random(),
-                        name: `Sayfa ${i}`,
-                        objects: [],
-                        backgroundColor: 'white',
-                        backgroundPattern: 'none',
-                        thumbnail: null,
-                        pdfPageNumber: i,
-                        pdfDimensions: {
-                            width: viewport.width / 2.0, // Storage in 1.0 scale
-                            height: viewport.height / 2.0
-                        }
+                        newPages.push({
+                            id: Date.now() + pageNum + Math.random(),
+                            name: `Sayfa ${pageNum}`,
+                            objects: [],
+                            backgroundColor: 'white',
+                            backgroundPattern: 'none',
+                            thumbnail: null,
+                            pdfPageNumber: pageNum,
+                            pdfDimensions: {
+                                width: viewport.width,
+                                height: viewport.height
+                            }
+                        });
                     });
+                    
+                    // Allow UI to breathe between batches
+                    if (numPages > batchSize) {
+                        await new Promise(r => setTimeout(r, 0));
+                    }
                 }
 
                 // Update the app's page list once fully loaded
                 this.app.pageManager.pages = newPages;
-
-                // Caller should handle switching/rendering
                 this.app.pageManager.renderPageList();
-                this.app.pageManager.refreshAllThumbnails();
+                
+                // Only refresh thumbnails if sidebar is visible to save CPU
+                const sidebarVisible = this.app.pageManager.sidebar && !this.app.pageManager.sidebar.classList.contains('collapsed');
+                if (sidebarVisible) {
+                    this.app.pageManager.refreshAllThumbnails();
+                }
             }
 
             return true;
@@ -88,7 +108,12 @@ class PDFManager {
         if (!this.isLoaded || !this.pdfDoc) return null;
 
         const pageId = Number(pageNum);
+        
+        // LRU Cache Check
         if (this.pageBuffers.has(pageId)) {
+            // Move to end of access order (most recent)
+            this.bufferAccessOrder = this.bufferAccessOrder.filter(id => id !== pageId);
+            this.bufferAccessOrder.push(pageId);
             return this.pageBuffers.get(pageId);
         }
 
@@ -115,7 +140,24 @@ class PDFManager {
                 this.textSelector.renderTextLayer(page, viewport);
             }
 
+            // Manage Cache Size (Eviction)
+            if (this.pageBuffers.size >= this.maxBuffers) {
+                const oldestId = this.bufferAccessOrder.shift();
+                const oldestBuffer = this.pageBuffers.get(oldestId);
+                if (oldestBuffer) {
+                    oldestBuffer.width = 0; // Help GC
+                    oldestBuffer.height = 0;
+                }
+                this.pageBuffers.delete(oldestId);
+                
+                // Also tell textSelector to evict if possible
+                if (this.textSelector && this.textSelector.evictLayer) {
+                    this.textSelector.evictLayer(oldestId - 1);
+                }
+            }
+
             this.pageBuffers.set(pageId, buffer);
+            this.bufferAccessOrder.push(pageId);
             this.loadingBuffers.delete(pageId);
             
             // Trigger a redraw now that we have the background
@@ -175,6 +217,20 @@ class PDFManager {
         this.pdfDoc = null;
         this.currentUrl = null;
         this.isLoaded = false;
+        this.clearBuffers();
+        if (this.textSelector) this.textSelector.clear();
+    }
+
+    /**
+     * Internal helper to clear memory
+     */
+    clearBuffers() {
+        this.pageBuffers.forEach(canvas => {
+            canvas.width = 0;
+            canvas.height = 0;
+        });
         this.pageBuffers.clear();
+        this.bufferAccessOrder = [];
+        this.loadingBuffers.clear();
     }
 }

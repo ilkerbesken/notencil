@@ -66,14 +66,17 @@ class TabManager {
     async switchToBoard(boardId, templateId = null) {
         if (this.activeBoardId === boardId) return;
 
-        // Save current board
+        // Save current board (in background to avoid blocking UI)
         if (this.activeBoardId && window.dashboard) {
-            window.dashboard.currentBoardId = this.activeBoardId;
-            try {
-                await window.dashboard.saveCurrentBoard(true); // Force save before switching
-            } catch (e) {
-                console.error('[TabManager] Save failed during switch:', e);
-            }
+            const idToSave = this.activeBoardId;
+            // Use a timeout to ensure the UI can start switching immediately
+            setTimeout(() => {
+                if (window.dashboard.currentBoardId === idToSave) {
+                    window.dashboard.saveCurrentBoard(true).catch(e => {
+                        console.error('[TabManager] Background save failed:', e);
+                    });
+                }
+            }, 50);
         }
 
         this.activeBoardId = boardId;

@@ -244,5 +244,13 @@
     "lang_en": "Anglais",
     "lang_de": "Allemand",
     "lang_fr": "Français",
-    "lang_es": "Espagnol"
+    "lang_es": "Espagnol",
+    "about": "À propos",
+    "sort_folders": "Trier les dossiers",
+    "sort_notes": "Trier les notes",
+    "sort_by_name": "Trier par nom",
+    "sort_by_size": "Trier par taille",
+    "sort_by_date": "Trier par date",
+    "ascending": "Croissant",
+    "descending": "Décroissant"
 }
