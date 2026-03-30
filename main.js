@@ -16,6 +16,12 @@ function createWindow() {
   // win.webContents.openDevTools(); // Geliştirme aşamasında konsolu açmak isterseniz
 }
 
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-unsafe-webgpu');
+app.commandLine.appendSwitch('enable-features', 'Vulkan,VulkanFromANGLE,DefaultANGLEVulkan');
+
 app.whenReady().then(() => {
   createWindow();
 

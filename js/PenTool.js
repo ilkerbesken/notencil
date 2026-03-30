@@ -268,7 +268,7 @@ class PenTool {
         const gpu = window.webGPURenderer;
         if (
             style === 'solid'
-            && displayPoints.length >= 20
+            && displayPoints.length >= 2 // Lower threshold to use GPU even for short strokes
             && gpu && gpu.isSupported
         ) {
             const tx = ctx.getTransform();

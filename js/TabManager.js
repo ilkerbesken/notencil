@@ -66,17 +66,17 @@ class TabManager {
     async switchToBoard(boardId, templateId = null) {
         if (this.activeBoardId === boardId) return;
 
-        // Save current board (in background to avoid blocking UI)
+        // Save current board before switching
         if (this.activeBoardId && window.dashboard) {
             const idToSave = this.activeBoardId;
-            // Use a timeout to ensure the UI can start switching immediately
-            setTimeout(() => {
-                if (window.dashboard.currentBoardId === idToSave) {
-                    window.dashboard.saveCurrentBoard(true).catch(e => {
-                        console.error('[TabManager] Background save failed:', e);
-                    });
-                }
-            }, 50);
+            try {
+                // Force save the OLD board before loading the NEW one
+                // Use await to ensure data is safe, but since I optimized saveCurrentBoard 
+                // to be non-blocking with idleCallback for heavy stuff, it will be fast.
+                await window.dashboard.saveCurrentBoard(true, false, idToSave);
+            } catch (e) {
+                console.error('[TabManager] Save failed during switch:', e);
+            }
         }
 
         this.activeBoardId = boardId;
