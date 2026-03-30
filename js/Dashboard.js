@@ -56,6 +56,8 @@ class Dashboard {
         ];
         this.customCovers = []; // Will load in initAsync
         this._pdfBase64Cache = new Map(); // Cache for PDF base64 strings to speed up saving
+        this._pdfInDbCache = new Set();   // Cache for board IDs whose PDF blob exists in IndexedDB
+        this._lastOpenedBoardId = null;   // Tracks the board ID across navigation for background save
 
         this.folderIcons = [
             'folder', 'star-01', 'book-open-01', 'file-02', 'search-refraction', 'mail-01', 
@@ -1861,6 +1863,9 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             // Save to IndexedDB
             await Utils.db.save(id, file);
 
+            // Update cache as well
+            if (this._pdfInDbCache) this._pdfInDbCache.add(id);
+
             this.boards.push(newBoard);
             await this.saveDataAsync('wb_boards', this.boards);
 
@@ -1886,6 +1891,10 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
     async loadBoard(id, templateId = null) {
         const board = this.boards.find(b => b.id === id);
         if (!board) return;
+
+        // Track the last opened board so showDashboard() can save it in the background
+        // even after currentBoardId has been set to null.
+        this._lastOpenedBoardId = id;
 
         this.showLoading();
 
@@ -2111,10 +2120,19 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
 
                 const shouldUpdatePreview = !skipHeavy && (force || !board._lastPreviewTime || (now - board._lastPreviewTime > 60000));
                 if (shouldUpdatePreview) {
-                    try {
-                        board.preview = this.app.canvas.toDataURL('image/webp', 0.4);
-                        board._lastPreviewTime = now;
-                    } catch (error) { console.warn('Preview error:', error); }
+                    // FIX: canvas.toDataURL() is synchronous and blocks the main thread.
+                    // Defer it to an idle callback so it doesn't freeze the UI during navigation.
+                    const capturePreview = () => {
+                        try {
+                            board.preview = this.app.canvas.toDataURL('image/webp', 0.4);
+                            board._lastPreviewTime = Date.now();
+                        } catch (error) { console.warn('Preview error:', error); }
+                    };
+                    if (window.requestIdleCallback) {
+                        requestIdleCallback(capturePreview, { timeout: 3000 });
+                    } else {
+                        setTimeout(capturePreview, 0);
+                    }
                 }
 
                 board.lastModified = now;
@@ -2185,8 +2203,20 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             // For regular autosaves, including 10MB+ of base64 in the JSON content
             // is the main cause of stuttering on PDF boards.
             let pdfBase64 = null;
-            const pdfSourceInDB = await Utils.db.get(boardId);
-            
+            // FIX: Cache whether the PDF blob exists in DB instead of reading the full blob
+            // every save cycle. Reading a 5-20MB blob from IndexedDB on every autosave
+            // is a major source of lag on PDF boards.
+            if (!this._pdfInDbCache) this._pdfInDbCache = new Set();
+            let pdfSourceInDB = this._pdfInDbCache.has(boardId);
+            if (!pdfSourceInDB) {
+                // Only do the expensive DB read once to populate the cache
+                const blobCheck = await Utils.db.get(boardId);
+                if (blobCheck) {
+                    this._pdfInDbCache.add(boardId);
+                    pdfSourceInDB = true;
+                }
+            }
+
             if (!pdfSourceInDB) {
                 pdfBase64 = this._pdfBase64Cache.get(boardId) || null;
                 if (!pdfBase64 && this.app.pdfManager && this.app.pdfManager.isLoaded) {
@@ -2195,6 +2225,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                         if (pdfBlob instanceof Blob) {
                             pdfBase64 = await this.app.ncilFileManager._blobToBase64(pdfBlob);
                             this._pdfBase64Cache.set(boardId, pdfBase64);
+                            this._pdfInDbCache.add(boardId); // Mark as in DB for future saves
                         }
                     } catch (e) { console.warn('PDF fetch error:', e); }
                 }
@@ -2289,18 +2320,9 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
     }
 
     async showDashboard() {
-        try {
-            await this.saveCurrentBoard(true); // Always force save when going back
-            this._pdfBase64Cache.clear(); // Clear cache when leaving board
-        } catch (error) {
-            console.error('[Dashboard] Background save failed, but proceeding to dashboard:', error);
-        }
-
-        // Keep tabs open when returning to dashboard
-        // Users can close tabs manually if needed
-
-        this.boards = await this.loadDataAsync('wb_boards', []); // Refresh
-        this.folders = await this.loadDataAsync('wb_folders', []); // Refresh
+        // FIX: Show the dashboard UI immediately instead of waiting for the save to complete.
+        // Previously, `await saveCurrentBoard(true)` blocked the UI switch, causing a visible
+        // freeze. Now we switch the view first, then save in the background.
         this.currentBoardId = null;
         this.container.style.display = 'flex';
         this.appContainer.style.display = 'none';
@@ -2314,8 +2336,35 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             overlay?.classList.remove('show');
         }
 
-        this.renderSidebar(); // Re-render sidebar to update counts/active
+        // Render immediately with cached board data so the grid appears right away
+        this.renderSidebar();
         this.renderBoards();
+
+        // Run save + data refresh in the background after UI is visible
+        const prevBoardId = this._lastOpenedBoardId;
+        this._lastOpenedBoardId = null;
+        Promise.resolve().then(async () => {
+            try {
+                // Temporarily restore boardId for the save call
+                this.currentBoardId = prevBoardId;
+                await this.saveCurrentBoard(true);
+            } catch (error) {
+                console.error('[Dashboard] Background save failed:', error);
+            } finally {
+                this.currentBoardId = null;
+                this._pdfBase64Cache.clear();
+                // Also clear the PDF-in-DB cache when leaving a board
+                if (this._pdfInDbCache && prevBoardId) {
+                    // Keep the cache entry — it's still valid for next open
+                }
+            }
+
+            // Refresh board list from storage after save (picks up lastModified etc.)
+            this.boards = await this.loadDataAsync('wb_boards', []);
+            this.folders = await this.loadDataAsync('wb_folders', []);
+            this.renderSidebar();
+            this.renderBoards();
+        });
     }
 
     async deleteBoard(id) {
@@ -2326,6 +2375,12 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 this.boards = this.boards.filter(b => b.id !== id);
                 // FileSystemManager üzerinden sil (native klasörü de temizler)
                 await window.fileSystemManager.removeItem(`wb_content_${id}`);
+
+                // Remove PDF from IndexedDB if applicable and clear cache
+                if (board.isPDF) {
+                    if (this._pdfInDbCache) this._pdfInDbCache.delete(id);
+                    Utils.db.delete(id).catch(err => console.error('PDF silme hatası:', err));
+                }
 
                 // Senkronizasyon için silindiğini işaretle
                 const deletedIds = await this.loadDataAsync('wb_deleted_ids', []);
@@ -2367,6 +2422,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             await Promise.all(trashedBoards.map(async b => {
                 await window.fileSystemManager.removeItem(`wb_content_${b.id}`);
                 if (b.isPDF) {
+                    if (this._pdfInDbCache) this._pdfInDbCache.delete(b.id);
                     Utils.db.delete(b.id).catch(err => console.error('PDF silme hatası:', err));
                 }
             }));
@@ -3317,6 +3373,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                             if (board) {
                                 await window.fileSystemManager.removeItem(`wb_content_${id}`);
                                 if (board.isPDF) {
+                                    if (this._pdfInDbCache) this._pdfInDbCache.delete(id);
                                     Utils.db.delete(id).catch(err => console.error('PDF silme hatası:', err));
                                 }
                             }
