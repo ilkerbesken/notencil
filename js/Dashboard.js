@@ -2088,11 +2088,11 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         this.app.render();
     }
 
-    async saveCurrentBoard(force = false, skipHeavy = false) {
-        const boardId = this.currentBoardId;
+    async saveCurrentBoard(force = false, skipHeavy = false, boardIdToSave = null) {
+        const boardId = boardIdToSave || this.currentBoardId;
         if (!boardId) return;
 
-        // Clear existing timeout
+        // Clear existing timeout if it exists
         if (this._saveTimeout) {
             clearTimeout(this._saveTimeout);
             this._saveTimeout = null;

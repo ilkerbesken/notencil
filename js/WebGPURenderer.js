@@ -10,23 +10,40 @@ class WebGPURenderer {
 
     async _init() {
         if (!navigator.gpu) {
-            console.info('[WebGPU] Browser does not support WebGPU. Falling back to Canvas2D.');
+            console.info('[WebGPU] Tarayıcı WebGPU desteklemiyor. Canvas2D yedeğine geçiliyor.');
             this._supported = false;
             return;
         }
 
         try {
+            // Request high performance adapter
             this._adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-            if (!this._adapter) { this._supported = false; return; }
+            
+            if (!this._adapter) { 
+                console.warn('[WebGPU] ⚠️ Donanım hızlandırıcı (GPU) bulunamadı. Lütfen tarayıcı ayarlarından Donanım Hızlandırma\'yı açın veya chrome://flags üzerinden WebGPU/Vulkan\'ı aktif edin.');
+                this._supported = false; 
+                this._ready = false;
+                return; 
+            }
 
             this._device = await this._adapter.requestDevice();
+            console.info('[WebGPU] 🚀 Cihaz bağlandı:', this._adapter.name || 'Bilinmeyen GPU');
+
             this._device.lost.then((info) => {
-                console.warn('[WebGPU] Device lost:', info.message);
+                console.warn('[WebGPU] 🛑 Cihaz bağlantısı koptu:', info.message);
                 this._ready = false;
                 this._supported = false;
             });
 
             this._format = navigator.gpu.getPreferredCanvasFormat();
+            
+            // Initialization of pipelines and auxiliary canvases
+            this._strokePipeline = await this._buildStrokePipeline();
+            this._charcoalPipeline = await this._buildCharcoalPipeline();
+            this._fountainPenPipeline = await this._buildFountainPenPipeline();
+            this._imagePipeline = await this._buildImagePipeline();
+
+            // Initial buffer sizing
             this._gpuCanvas = new OffscreenCanvas(2048, 2048);
             this._context = this._gpuCanvas.getContext('webgpu');
             this._context.configure({
@@ -35,18 +52,13 @@ class WebGPURenderer {
                 alphaMode: 'premultiplied'
             });
 
-            // Build Pipelines
-            this._strokePipeline = await this._buildStrokePipeline();
-            this._charcoalPipeline = await this._buildCharcoalPipeline();
-            this._fountainPenPipeline = await this._buildFountainPenPipeline();
-            this._imagePipeline = await this._buildImagePipeline();
-
             this._ready = true;
             this._supported = true;
-            console.info('[WebGPU] ✅ Initialized successfully.');
+            console.info('[WebGPU] ✅ Başarıyla başlatıldı.');
         } catch (err) {
-            console.warn('[WebGPU] Init error:', err);
+            console.error('[WebGPU] Başlatma hatası:', err);
             this._supported = false;
+            this._ready = false;
         }
     }
 
