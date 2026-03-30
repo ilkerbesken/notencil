@@ -1,6 +1,6 @@
 {
   "name": "notencil",
-  "version": "1.0.5",
+  "version": "1.0.5.1",
   "description": "Profesyonel Dijital Beyaz Tahta ve Not Alma Uygulaması",
   "main": "main.js",
   "scripts": {

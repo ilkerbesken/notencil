@@ -98,10 +98,13 @@ class Dashboard {
                 if (this.boards.length === 0) {
                     console.log('[Dashboard] Local storage empty, attempting to restore from Google Drive...');
                     const res = await cloud.loadFromGoogleDrive();
-                    if (res.success) {
-                        // Refresh UI with new data
+                    if (res && res.success && (res.syncCount > 0 || res.delta)) {
+                        // Refresh UI with new data only if something actually changed
+                        console.log(`[Dashboard] Sync successful, ${res.syncCount} items downloaded. Reloading UI...`);
                         await this.initAsync();
                         return;
+                    } else if (res && res.success) {
+                        console.log('[Dashboard] Restore completed but no new files were found.');
                     }
                 }
 
@@ -842,51 +845,61 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         // Do NOT reload from localStorage here — saveData is async and may lag.
         if (!Array.isArray(this.boards)) this.boards = [];
 
-        let filtered = [];
+        let boardFiltered = [];
+        let folderFiltered = [];
 
         if (this.currentView === 'trash') {
-            filtered = this.boards.filter(b => b.deleted);
+            boardFiltered = this.boards.filter(b => b.deleted);
         } else {
             // Base filter: non-deleted
-            let base = this.boards.filter(b => !b.deleted);
+            let baseBoards = this.boards.filter(b => !b.deleted);
 
-            if (this.currentView === 'all') {
-                filtered = base;
+            if (this.searchTerm) {
+                // Search: flat list across all boards
+                boardFiltered = baseBoards.filter(b => b.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
+            } else if (this.currentView === 'all') {
+                // Root: Root folders + Boards with no folder (or boards in folders NOT in our list, theoretically orphans)
+                folderFiltered = this.folders.filter(f => !f.parentId);
+                const folderIds = new Set(this.folders.map(f => f.id));
+                boardFiltered = baseBoards.filter(b => !b.folderId || !folderIds.has(b.folderId));
             } else if (this.currentView === 'recent') {
-                filtered = [...base].sort((a, b) => b.lastModified - a.lastModified);
+                boardFiltered = [...baseBoards].sort((a, b) => b.lastModified - a.lastModified);
             } else if (this.currentView === 'favorites') {
-                filtered = base.filter(b => b.favorite);
+                boardFiltered = baseBoards.filter(b => b.favorite);
             } else if (this.currentView.startsWith('f_')) {
-                filtered = base.filter(b => b.folderId === this.currentView);
+                // Folder: Subfolders + Boards in this folder
+                folderFiltered = this.folders.filter(f => f.parentId === this.currentView);
+                boardFiltered = baseBoards.filter(b => b.folderId === this.currentView);
             } else {
-                filtered = base;
+                boardFiltered = baseBoards;
             }
         }
 
-        // Apply custom sorting if specified
+        // Apply custom sorting to both lists if named sort is active
         if (this.boardSortField === 'name') {
-            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+            const sortName = (a, b) => this.boardSortOrder === 'asc' 
                 ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) 
-                : b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+                : b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' });
+            boardFiltered.sort(sortName);
+            folderFiltered.sort(sortName);
         } else if (this.boardSortField === 'date') {
-            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+            boardFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
                 ? a.lastModified - b.lastModified 
                 : b.lastModified - a.lastModified);
+            // Folders use created date
+            folderFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
+                ? (a.created || 0) - (b.created || 0) 
+                : (b.created || 0) - (a.created || 0));
         } else if (this.boardSortField === 'size') {
-            filtered.sort((a, b) => this.boardSortOrder === 'asc' 
+            boardFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
                 ? (a.objectCount || 0) - (b.objectCount || 0) 
                 : (b.objectCount || 0) - (a.objectCount || 0));
         }
 
-        // Apply Search Filter
-        if (this.searchTerm) {
-            filtered = filtered.filter(b => b.name.toLowerCase().includes(this.searchTerm));
-        }
-
-        this.updateSelectAllButtonState(filtered);
+        this.updateSelectAllButtonState(boardFiltered);
 
 
-        if (filtered.length === 0 && this.currentView === 'trash') {
+        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.currentView === 'trash') {
             this.boardGrid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">
@@ -898,7 +911,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             return;
         }
 
-        if (filtered.length === 0 && this.searchTerm) {
+        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.searchTerm) {
             this.boardGrid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">🔍</div>
@@ -910,7 +923,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             return;
         }
 
-        if (filtered.length === 0 && this.currentView !== 'trash') {
+        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.currentView !== 'trash') {
             this.boardGrid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">
@@ -929,7 +942,37 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         }
 
 
-        filtered.forEach(board => {
+        // Render Folders First
+        folderFiltered.forEach(folder => {
+            const card = document.createElement('div');
+            card.className = 'folder-card';
+            card.dataset.id = folder.id;
+            
+            const folderColor = folder.color || '#ccc';
+            const boardCount = this.boards.filter(b => b.folderId === folder.id && !b.deleted).length;
+            const subfolderCount = this.folders.filter(f => f.parentId === folder.id).length;
+            
+            let metaText = `${boardCount} ${window.i18n.t('notes')}`;
+            if (subfolderCount > 0) metaText += `, ${subfolderCount} ${window.i18n.t('folders')}`;
+
+            card.innerHTML = `
+                <div class="folder-container">
+                    <div class="folder-tab" style="background: ${folderColor}; opacity: 0.3;"></div>
+                    <app-icon name="${folder.icon || 'folder'}" class="folder-icon-large" style="color: ${folderColor === '#ccc' ? 'inherit' : folderColor}"></app-icon>
+                    <div class="folder-menu-trigger">⋮</div>
+                </div>
+                <div class="folder-info">
+                    <div class="folder-title">${folder.name}</div>
+                    <div class="folder-meta">${metaText}</div>
+                </div>
+            `;
+            
+            card.onclick = () => this.switchView(folder.id);
+            
+            this.boardGrid.appendChild(card);
+        });
+
+        boardFiltered.forEach(board => {
             const card = document.createElement('div');
             card.className = `board-card ${this.selectedBoards.has(board.id) ? 'selected' : ''}`;
             card.dataset.id = board.id;
@@ -1543,7 +1586,16 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 btnGDriveSave.disabled = true;
                 try {
                     const result = await getCloud().saveToGoogleDrive();
-                    setStatus('✅ ' + result.message);
+                    if (result.success) {
+                        setStatus('✅ ' + result.message);
+                        // Refresh dashboard to show discovered or synced items
+                        setTimeout(async () => {
+                            await this.initAsync();
+                        }, 1000);
+                    } else {
+                        setStatus('ℹ️ ' + result.message);
+                    }
+                    
                     // Google oturumu açıksa çıkış butonunu göster
                     const signOutBtn = document.getElementById('btn-gdrive-signout');
                     if (signOutBtn) signOutBtn.style.display = 'flex';
@@ -1782,8 +1834,8 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             card.ondragend = () => card.classList.remove('dragging');
         });
 
-        // Add drop support to folder items in sidebar
-        document.querySelectorAll('.folder-item').forEach(folder => {
+        // Add drop support to folder items in sidebar AND grid
+        document.querySelectorAll('.folder-item, .folder-card').forEach(folder => {
             folder.ondragover = (e) => {
                 e.preventDefault();
                 folder.classList.add('drop-target');
@@ -1792,7 +1844,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             folder.ondrop = (e) => {
                 e.preventDefault();
                 const boardId = e.dataTransfer.getData('boardId');
-                const folderId = folder.dataset.view;
+                const folderId = folder.dataset.view || folder.dataset.id;
                 this.moveBoardToFolder(boardId, folderId);
                 folder.classList.remove('drop-target');
             };
