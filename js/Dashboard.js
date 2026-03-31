@@ -2026,6 +2026,19 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 }
             }
 
+            // Fallback 2: Try pulling from Google Drive if available
+            if (!pdfBlob && getCloud().gdriveToken && this.app.pdfManager) {
+                const board = this.boards.find(b => b.id === id);
+                if (board && board.isPDF) {
+                    console.log('[Dashboard] PDF not found locally, attempting Drive download...');
+                    const success = await getCloud()._downloadPdfBackground(board);
+                    if (success) {
+                        pdfBlob = await Utils.db.get(id);
+                        console.log('[Dashboard] PDF successfully recovered from Google Drive.');
+                    }
+                }
+            }
+
             if (pdfBlob && this.app.pdfManager) {
                 if (pdfBlob.size === 0) {
                     console.warn('[Dashboard] PDF blob is empty (0 bytes)!');
@@ -2272,7 +2285,13 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 // Eğer bu bir ham PDF ise ve üzerine bir şeyler yazılmışsa (objects veya sayfa eklenmişse)
                 // artık ham kaynak değildir, Drive'da sidecar (.ncil) oluşturulması gerekir.
                 const b = boardMetaToSave.find(x => x.id === boardId);
-                if (b && b.isRawSource && ((optimizedPages && optimizedPages.length > 0) || (content.objects && content.objects.length > 0))) {
+                
+                // GÜVENLİK: Eğer yerel klasör bağlantısı kesildiyse ve objects/pages boş görünüyorsa, 
+                // isRawSource'u yanlışlıkla false yapmamalıyız. 
+                // Sadece AKTİF olarak bir şey eklenmişse false yapmalıyız.
+                const hasActiveContent = (optimizedPages && optimizedPages.length > 0) || (content.objects && content.objects.length > 0);
+                
+                if (b && b.isRawSource && hasActiveContent) {
                     b.isRawSource = false;
                     console.log(`[Dashboard] ${b.name} artık ham kaynak değil (notlar eklendi).`);
                 }
