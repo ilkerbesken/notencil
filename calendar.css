@@ -134,9 +134,13 @@
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    cursor: grab;
+    cursor: pointer;
     transition: all 0.2s;
     color: var(--text-primary);
+}
+
+.sidebar-note-item:active {
+    cursor: grabbing;
 }
 
 .sidebar-note-item:hover {

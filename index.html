@@ -171,27 +171,9 @@
 
             <nav class="sidebar-nav">
                 <div class="nav-section">
-                    <div class="nav-item active" data-view="all">
-                        <app-icon name="file-04" class="nav-icon"></app-icon>
-                        <span data-i18n="all_pages">Tüm Sayfalar</span>
-                    </div>
                     <div class="nav-item" data-view="recent">
                         <app-icon name="hourglass-03" class="nav-icon"></app-icon>
                         <span data-i18n="recent">Son Kullanılanlar</span>
-                    </div>
-                </div>
-                <div class="nav-section">
-                    <div class="section-title"
-                        style="margin-top: auto; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
-                        <span data-i18n="collections">KOLEKSİYONLAR</span>
-                    </div>
-                    <div class="nav-item" data-view="favorites">
-                        <app-icon name="star-01" class="nav-icon"></app-icon>
-                        <span data-i18n="favorites">Favoriler</span>
-                    </div>
-                    <div class="nav-item" data-view="trash">
-                        <app-icon name="trash-01" class="nav-icon"></app-icon>
-                        <span data-i18n="trash">Çöp Kutusu</span>
                     </div>
                 </div>
                 <div class="nav-section">
@@ -210,6 +192,21 @@
                     </div>
                     <div id="folderList">
                         <!-- Dynamic folders will be listed here -->
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="section-title"
+                        style="margin-top: auto; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
+                        <span data-i18n="collections">KOLEKSİYONLAR</span>
+                    </div>
+                    <div class="nav-item" data-view="favorites">
+                        <app-icon name="star-01" class="nav-icon"></app-icon>
+                        <span data-i18n="favorites">Favoriler</span>
+                    </div>
+                    <div class="nav-item" data-view="trash">
+                        <app-icon name="trash-01" class="nav-icon"></app-icon>
+                        <span data-i18n="trash">Çöp Kutusu</span>
                     </div>
                 </div>
 
@@ -261,6 +258,11 @@
                         <button id="btnSortNotes" class="btn-icon" data-i18n-title="sort_notes">
                             <app-icon name="filter-funnel-01" alt="sort"></app-icon>
                         </button>
+                        <div id="todayNotesBadge" class="today-notes-badge" style="display: none;">
+                            <app-icon name="calendar-date" class="badge-icon"></app-icon>
+                            <span class="badge-count">0</span>
+                            <div id="todayNotesPopup" class="today-notes-popup"></div>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -292,8 +294,8 @@
             <!-- Sort Options Dropdown (Boards) -->
             <div id="breadcrumbPathRow" class="breadcrumb-path-row" style="display: none;">
                 <div class="path-container">
-                    <app-icon name="folder-01" class="path-icon"></app-icon>
-                    <span id="breadcrumbPathText" class="path-text">notencil / Tüm Sayfalar</span>
+                    <app-icon name="home-02" class="path-icon"></app-icon>
+                    <span id="breadcrumbPathText" class="path-text">notencil / Kök Dizin</span>
                 </div>
             </div>
 
@@ -1933,7 +1935,7 @@
                             <div class="settings-item-row">
                                 <span data-i18n="remember_last_page">Son Kalınan Sayfayı Hatırla</span>
                                 <label class="switch">
-                                    <input type="checkbox" id="checkRememberLastPage">
+                                    <input type="checkbox" id="checkRememberLastPage" checked>
                                     <span class="slider round"></span>
                                 </label>
                             </div>
@@ -2045,7 +2047,7 @@
                                         <span class="segment-label">10dk</span>
                                     </label>
                                     <label title="Sadece belge kapatıldığında kaydedilir">
-                                        <input type="radio" name="autosaveInterval" value="off">
+                                        <input type="radio" name="autosaveInterval" value="off" checked>
                                         <span class="segment-label">Kapanınca</span>
                                     </label>
                                 </div>
@@ -2065,7 +2067,7 @@
                             </div>
                             <h3 style="margin: 10px 0 5px 0;">notencil</h3>
                             <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 30px;">Versiyon
-                                1.0.5.1</p>
+                                <span id="app-version">1.0.6</span></p>
 
                             <div class="about-links"
                                 style="display: flex; flex-direction: column; gap: 12px; max-width: 300px; margin: 0 auto;">
@@ -2161,6 +2163,18 @@
     <script src="./js/app.js?v=0.8.12"></script>
     <!--  PWA Güncelleme Tanımları  -->
     <script src="./js/pwa-updates.js?v=0.8.12"></script>
+    <script>
+        // Sürüm bilgisini otomatik güncelle
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.appInfo && window.appInfo.version) {
+                const versionElements = document.querySelectorAll('#app-version');
+                versionElements.forEach(el => {
+                    el.textContent = window.appInfo.version;
+                });
+                console.log('Uygulama sürümü yüklendi:', window.appInfo.version);
+            }
+        });
+    </script>
 </body>
 
 </html>

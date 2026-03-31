@@ -197,8 +197,20 @@ class CloudStorageManager {
                         rb.alwaysSaveAsPDF = true;
                     } else {
                         await fsm.saveItem(`wb_content_${rb.id}`, content, true);
-                        // Eğer içerikte gömülü PDF varsa onu da ayıklayıp DB'ye koymak iyi olurdu
-                        // ama şimdilik JSON olarak saklamak yeterli (Dashboard.js açılışta hallediyor).
+                        
+                        // Eğer içerikte gömülü PDF varsa onu da ayıklayıp DB'ye kaydet
+                        if (content.pdfBase64 && this.app.ncilFileManager) {
+                            try {
+                                const pdfBlob = await this.app.ncilFileManager._base64ToBlob(content.pdfBase64, 'application/pdf');
+                                if (pdfBlob) {
+                                    await Utils.db.save(rb.id, pdfBlob);
+                                    rb.isPDF = true; // Meta veriyi doğrula
+                                    console.log('[CloudSync] Gömülü PDF başarıyla ayıklandı ve DB\'ye kaydedildi:', rb.id);
+                                }
+                            } catch (e) {
+                                console.error('[CloudSync] PDF ayıklama hatası:', e);
+                            }
+                        }
                     }
                     const idx = localBoards.findIndex(b => b.id === rb.id);
                     if (idx !== -1) localBoards[idx] = rb; else localBoards.push(rb);
@@ -208,7 +220,10 @@ class CloudStorageManager {
             
             // Drive ID'sini mühürle
             if (isDiscoveryMode && rb.googleDriveFileId) {
-                await fsm.setSyncMetadata(rb.id, { googleDriveFileId: rb.googleDriveFileId, lastSyncedTime: Date.now() });
+                // SADECE ham kaynak değilse ID'yi mühürle. 
+                // Ham kaynaksa ID mühürlenmezse ilk push yeni dosya (.ncil) oluşturur, orijinal PDF korunur.
+                const syncId = rb.isRawSource ? null : rb.googleDriveFileId;
+                await fsm.setSyncMetadata(rb.id, { googleDriveFileId: syncId, lastSyncedTime: Date.now() });
             }
         }
 
@@ -236,8 +251,19 @@ class CloudStorageManager {
 
             const needsPush = !meta.googleDriveFileId || (meta.lastModifiedLocally > (meta.lastSyncedTime || 0));
             if (needsPush) {
-                const content = await fsm.getItem(`wb_content_${board.id}`, null);
+                let content = await fsm.getItem(`wb_content_${board.id}`, null);
                 if (content) {
+                    // Drive'a gönderirken eğer PDF ise ve base64 yoksa, DB'den çekip ekle
+                    // Çünkü diğer cihazlarda bu PDF olmayabilir.
+                    if (board.isPDF && !content.pdfBase64) {
+                        const pdfBlob = await Utils.db.get(board.id);
+                        if (pdfBlob && pdfBlob instanceof Blob) {
+                            if (this.app.ncilFileManager) {
+                                content.pdfBase64 = await this.app.ncilFileManager._blobToBase64(pdfBlob);
+                            }
+                        }
+                    }
+
                     const targetParentId = board.folderId ? driveFolderMapping[board.folderId] : appFolderId;
                     const driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, meta.googleDriveFileId);
                     await fsm.setSyncMetadata(board.id, { googleDriveFileId: driveFileId, lastSyncedTime: Date.now() });
@@ -394,8 +420,9 @@ class CloudStorageManager {
     async _uploadBoardNcil(board, content, folders, appFolderId, existingId) {
         const targetId = board.folderId ? await this._getDriveTargetFolderRobust(board.folderId, folders, appFolderId) : appFolderId;
         const bytes = await this._contentToNcil(content, board.id);
-        const name = board.isPDF ? `${board.name}.ncil` : `${board.name}.ncil`; // Her zaman .ncil (artık format standart)
-        return await this._uploadRawToDrive(name, bytes, APP_CONFIG.MIME_TYPE, targetId, existingId, { boardId: board.id, type: 'board' });
+        const name = board.isPDF ? `${board.name}.pdf.ncil` : `${board.name}.ncil`; 
+        const type = board.isPDF ? 'pdf' : 'board';
+        return await this._uploadRawToDrive(name, bytes, APP_CONFIG.MIME_TYPE, targetId, existingId, { boardId: board.id, type: type });
     }
 
     async _getDriveTargetFolderRobust(folderId, folders, appFolderId) {
@@ -474,15 +501,17 @@ class CloudStorageManager {
                 folders.push(...subRes.folders);
             }
 
-            // 2. Boardları Ayıkla
+        // 2. Boardları Ayıkla
             for (const f of driveFiles.filter(x => x.mimeType !== 'application/vnd.google-apps.folder')) {
                 const isPDFFilename = f.name.toLowerCase().endsWith('.pdf');
                 const isNcilFilename = f.name.toLowerCase().endsWith('.ncil');
+                const isPDFNcil = f.name.toLowerCase().includes('.pdf.ncil');
                 
                 if (!isPDFFilename && !isNcilFilename) continue;
                 
                 // Dashboard.js "b_" ön eki beklediği için eğer yoksa ekliyoruz
                 let bId = f.appProperties?.boardId || f.id;
+                const isRawSource = !f.appProperties?.boardId; // Eğer boardId yoksa bu Drive'daki ham bir dosyadır
                 if (!bId.startsWith('b_')) bId = 'b_' + bId;
 
                 console.log(`[CloudSync] Discovery: Dosya bulundu -> ${f.name} (id: ${bId})`);
@@ -493,7 +522,8 @@ class CloudStorageManager {
                     lastModified: new Date(f.modifiedTime).getTime(),
                     folderId: logicalParentId,
                     googleDriveFileId: f.id,
-                    isPDF: isPDFFilename || f.appProperties?.type === 'pdf'
+                    isPDF: isPDFFilename || isPDFNcil || f.appProperties?.type === 'pdf',
+                    isRawSource: isRawSource
                 });
             }
             
@@ -501,7 +531,9 @@ class CloudStorageManager {
             console.error('[CloudSync] Discovery hatası:', e);
         }
 
-        // Tekilliği sağla (id bazlı)
+        // Tekilliği sağla (id bazlı) - NCIL dosyalarını ham dosyalara tercih et
+        // isRawSource: true olanlar başa, false olanlar sona (sona gelen Map'te kalır)
+        boards.sort((a, b) => (a.isRawSource === b.isRawSource) ? 0 : (a.isRawSource ? -1 : 1));
         const uniqueBoards = Array.from(new Map(boards.map(b => [b.id, b])).values());
         const uniqueFolders = Array.from(new Map(folders.map(f => [f.id, f])).values());
 
