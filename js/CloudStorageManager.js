@@ -54,26 +54,6 @@ class CloudStorageManager {
 
     async signInGoogle() {
         await this.init();
-
-        // Detect Electron environment
-        if (window.appInfo && window.appInfo.isElectron && window.electronAuth) {
-            console.log('[CloudSync] Electron ortamı algılandı, IPC yetkilendirmesi başlatılıyor...');
-            try {
-                // Electron yetkilendirme akışı (main process üzerinden)
-                const authData = await window.electronAuth.googleAuth(this.GOOGLE_CLIENT_ID, this.GOOGLE_SCOPES);
-                if (authData && authData.access_token) {
-                    this.gdriveToken = authData.access_token;
-                    localStorage.setItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`, authData.access_token);
-                    return authData.access_token;
-                }
-                throw new Error('Yetkilendirme verisi alınamadı.');
-            } catch (err) {
-                console.error('[CloudSync] Electron yetkilendirme hatası:', err);
-                throw err;
-            }
-        }
-
-        // Web (GIS) flow
         return new Promise((resolve, reject) => {
             // eslint-disable-next-line no-undef
             const client = google.accounts.oauth2.initTokenClient({
