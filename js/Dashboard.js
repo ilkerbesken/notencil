@@ -2334,6 +2334,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
 
             const content = {
                 version: "2.1",
+                id: boardId,
                 pages: optimizedPages,
                 currentPageIndex: this.app.pageManager ? this.app.pageManager.currentPageIndex : 0,
                 objects: optimizedPages ? null : (this.app.state.objects || []).map(obj => serializeObj(obj)),

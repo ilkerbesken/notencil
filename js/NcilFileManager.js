@@ -139,6 +139,7 @@ class NcilFileManager {
             format: 'ncil',
             savedAt: new Date().toISOString(),
             appVersion: APP_CONFIG.NAME,
+            id: boardId || window.dashboard?.currentBoardId,
             pages: pages,
             currentPageIndex: this.app.pageManager ? this.app.pageManager.currentPageIndex : 0,
             objects: pages ? null : (this.app.state.objects || []).map(obj => this._serializeObject(obj)),
@@ -395,8 +396,11 @@ class NcilFileManager {
             
             const boardName = file.name.replace(/\.ncil$/i, '') || window.i18n.t('imported_note');
             
+            // Eğer dosyada bir ID varsa onu kullan (Cihazlar arası tutarlılık için)
+            const boardId = content.id || 'ncil_' + Date.now();
+            
             // Check if board already exists in current session to avoid duplicates during rapid opens
-            let existingBoard = dashboard.boards.find(b => b.name === boardName && b.isNcilFile && (Date.now() - b.createdAt < 5000));
+            let existingBoard = dashboard.boards.find(b => b.id === boardId);
             
             let board;
             if (existingBoard) {
@@ -404,7 +408,7 @@ class NcilFileManager {
             } else {
                 const hasPDF = !!content.pdfBase64;
                 board = {
-                    id: 'ncil_' + Date.now(),
+                    id: boardId,
                     name: boardName,
                     createdAt: Date.now(),
                     lastModified: Date.now(),
