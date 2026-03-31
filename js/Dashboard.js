@@ -24,6 +24,8 @@ class Dashboard {
         this.btnSortNotes = document.getElementById('btnSortNotes');
         this.sortOptionsDropdown = document.getElementById('sortOptionsDropdown');
         this.loader = document.getElementById('dashboardLoader');
+        this.todayNotesBadge = document.getElementById('todayNotesBadge');
+        this.todayNotesPopup = document.getElementById('todayNotesPopup');
 
 
 
@@ -77,7 +79,7 @@ class Dashboard {
         // Now load data using the new async manager
         this.boards = await this.loadDataAsync('wb_boards', []);
         this.folders = await this.loadDataAsync('wb_folders', []);
-        this.viewSettings = await this.loadDataAsync('wb_view_settings', { gridSize: 'xsmall', rememberLastPage: true, autosaveInterval: '3000', darkTheme: false });
+        this.viewSettings = await this.loadDataAsync('wb_view_settings', { gridSize: 'xsmall', rememberLastPage: true, autosaveInterval: 'off', darkTheme: false });
         this.sidebarCollapsed = await this.loadDataAsync('wb_sidebar_collapsed', false);
         this.expandedFolders = await this.loadDataAsync('wb_expanded_folders', []);
         this.folderSortOrder = await this.loadDataAsync('wb_folder_sort_order', 'none'); // 'none', 'asc', 'desc'
@@ -450,7 +452,18 @@ class Dashboard {
     renderSidebar() {
         this.folderList.innerHTML = '';
 
-        // Listeners for static nav items (Tüm Sayfalar, Son Kullanılanlar, vb.)
+        // Prepend "All Pages" (Tüm Sayfalar) as the root folder-like item
+        const allPagesItem = document.createElement('div');
+        allPagesItem.className = `nav-item ${this.currentView === 'all' ? 'active' : ''}`;
+        allPagesItem.dataset.view = 'all';
+        allPagesItem.innerHTML = `
+            <app-icon name="file-04" class="nav-icon"></app-icon>
+            <span data-i18n="all_pages">${window.i18n.t('all_pages')}</span>
+        `;
+        allPagesItem.onclick = () => this.switchView('all');
+        this.folderList.appendChild(allPagesItem);
+
+        // Listeners for static nav items (Son Kullanılanlar, vb.)
         document.querySelectorAll('.nav-item[data-view]').forEach(item => {
             const view = item.dataset.view;
             if (view && !view.startsWith('f_')) {
@@ -841,138 +854,137 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         this.applyViewSettings();
         this.boardGrid.innerHTML = '';
 
-        // Use in-memory boards (already up-to-date after any mutation).
-        // Do NOT reload from localStorage here — saveData is async and may lag.
         if (!Array.isArray(this.boards)) this.boards = [];
+        if (!Array.isArray(this.folders)) this.folders = [];
 
-        let boardFiltered = [];
-        let folderFiltered = [];
+        let filteredBoards = [];
+        let filteredFolders = [];
 
         if (this.currentView === 'trash') {
-            boardFiltered = this.boards.filter(b => b.deleted);
+            filteredBoards = this.boards.filter(b => b.deleted);
         } else {
             // Base filter: non-deleted
             let baseBoards = this.boards.filter(b => !b.deleted);
+            let baseFolders = this.folders;
 
-            if (this.searchTerm) {
-                // Search: flat list across all boards
-                boardFiltered = baseBoards.filter(b => b.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
-            } else if (this.currentView === 'all') {
-                // Root: Root folders + Boards with no folder (or boards in folders NOT in our list, theoretically orphans)
-                folderFiltered = this.folders.filter(f => !f.parentId);
-                const folderIds = new Set(this.folders.map(f => f.id));
-                boardFiltered = baseBoards.filter(b => !b.folderId || !folderIds.has(b.folderId));
+            if (this.currentView === 'all') {
+                // Sadece kök dizindeki (folderId'si olmayan) notları göster
+                filteredBoards = baseBoards.filter(b => !b.folderId);
+                // Sadece kök dizindeki (parentId'si olmayan) klasörleri göster
+                filteredFolders = baseFolders.filter(f => !f.parentId);
             } else if (this.currentView === 'recent') {
-                boardFiltered = [...baseBoards].sort((a, b) => b.lastModified - a.lastModified);
+                filteredBoards = [...baseBoards].sort((a, b) => b.lastModified - a.lastModified).slice(0, 10);
             } else if (this.currentView === 'favorites') {
-                boardFiltered = baseBoards.filter(b => b.favorite);
+                filteredBoards = baseBoards.filter(b => b.favorite);
             } else if (this.currentView.startsWith('f_')) {
-                // Folder: Subfolders + Boards in this folder
-                folderFiltered = this.folders.filter(f => f.parentId === this.currentView);
-                boardFiltered = baseBoards.filter(b => b.folderId === this.currentView);
+                // Seçili klasörün içindeki notları ve alt klasörleri göster
+                filteredBoards = baseBoards.filter(b => b.folderId === this.currentView);
+                filteredFolders = baseFolders.filter(f => f.parentId === this.currentView);
             } else {
-                boardFiltered = baseBoards;
+                filteredBoards = baseBoards;
             }
         }
 
-        // Apply custom sorting to both lists if named sort is active
+        // Apply Sorting to Folders (Alphabetical)
+        filteredFolders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        // Apply custom sorting to Boards
         if (this.boardSortField === 'name') {
-            const sortName = (a, b) => this.boardSortOrder === 'asc' 
+            filteredBoards.sort((a, b) => this.boardSortOrder === 'asc' 
                 ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) 
-                : b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' });
-            boardFiltered.sort(sortName);
-            folderFiltered.sort(sortName);
+                : b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
         } else if (this.boardSortField === 'date') {
-            boardFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
+            filteredBoards.sort((a, b) => this.boardSortOrder === 'asc' 
                 ? a.lastModified - b.lastModified 
                 : b.lastModified - a.lastModified);
-            // Folders use created date
-            folderFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
-                ? (a.created || 0) - (b.created || 0) 
-                : (b.created || 0) - (a.created || 0));
         } else if (this.boardSortField === 'size') {
-            boardFiltered.sort((a, b) => this.boardSortOrder === 'asc' 
+            filteredBoards.sort((a, b) => this.boardSortOrder === 'asc' 
                 ? (a.objectCount || 0) - (b.objectCount || 0) 
                 : (b.objectCount || 0) - (a.objectCount || 0));
         }
 
-        this.updateSelectAllButtonState(boardFiltered);
+        // Apply Search Filter
+        if (this.searchTerm) {
+            const term = this.searchTerm.toLowerCase();
+            filteredBoards = filteredBoards.filter(b => b.name.toLowerCase().includes(term));
+            filteredFolders = filteredFolders.filter(f => f.name.toLowerCase().includes(term));
+        }
 
+        this.updateSelectAllButtonState(filteredBoards);
+        this.updateTodayNotesBadge();
 
-        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.currentView === 'trash') {
-            this.boardGrid.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                    <app-icon name="trash-01" style="width: 36px; height: 36px; opacity: 0.7;"></app-icon>
+        // Render Empty States
+        if (filteredBoards.length === 0 && filteredFolders.length === 0) {
+            if (this.currentView === 'trash') {
+                this.boardGrid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                        <app-icon name="trash-01" style="width: 36px; height: 36px; opacity: 0.7;"></app-icon>
+                        </div>
+                        <h3 data-i18n="empty_trash_desc">${window.i18n.t('empty_trash_desc')}</h3>
                     </div>
-                    <h3 data-i18n="empty_trash_desc">${window.i18n.t('empty_trash_desc')}</h3>
-                </div>
-            `;
-            return;
-        }
+                `;
+                return;
+            }
 
-        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.searchTerm) {
-            this.boardGrid.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">🔍</div>
-                    <h3 data-i18n="no_search_results">${window.i18n.t('no_search_results').replace('{searchTerm}', this.searchTerm)}</h3>
-                    <button class="btn btn-secondary" id="btnClearSearchGeneric" data-i18n="clear_search">${window.i18n.t('clear_search')}</button>
-                </div>
-            `;
-            this.boardGrid.querySelector('#btnClearSearchGeneric').onclick = () => this.clearSearch();
-            return;
-        }
-
-        if (boardFiltered.length === 0 && folderFiltered.length === 0 && this.currentView !== 'trash') {
-            this.boardGrid.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                    <app-icon name="file-04" style="width: 36px; height: 36px; opacity: 0.7;"></app-icon>
+            if (this.searchTerm) {
+                this.boardGrid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <h3 data-i18n="no_search_results">${window.i18n.t('no_search_results').replace('{searchTerm}', this.searchTerm)}</h3>
+                        <button class="btn btn-secondary" id="btnClearSearchGeneric" data-i18n="clear_search">${window.i18n.t('clear_search')}</button>
                     </div>
-                    <h3 data-i18n="no_notes">${window.i18n.t('no_notes')}</h3>
-                    <p data-i18n="no_notes_desc">${window.i18n.t('no_notes_desc')}</p>
-                    <button class="btn btn-primary" id="btnCreateFirstNote" data-i18n="create_first_note">
-                        ${window.i18n.t('create_first_note')}
-                    </button>
-                </div>
-            `;
-            const btn = this.boardGrid.querySelector('#btnCreateFirstNote');
-            if (btn) btn.onclick = () => this.createNewBoard();
-            return;
+                `;
+                this.boardGrid.querySelector('#btnClearSearchGeneric').onclick = () => this.clearSearch();
+                return;
+            }
+
+            if (this.currentView !== 'trash') {
+                this.boardGrid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                        <app-icon name="file-04" style="width: 36px; height: 36px; opacity: 0.7;"></app-icon>
+                        </div>
+                        <h3 data-i18n="no_notes">${window.i18n.t('no_notes')}</h3>
+                        <p data-i18n="no_notes_desc">${window.i18n.t('no_notes_desc')}</p>
+                        <button class="btn btn-primary" id="btnCreateFirstNote" data-i18n="create_first_note">
+                            ${window.i18n.t('create_first_note')}
+                        </button>
+                    </div>
+                `;
+                const btn = this.boardGrid.querySelector('#btnCreateFirstNote');
+                if (btn) btn.onclick = () => this.createNewBoard();
+                return;
+            }
         }
 
-
-        // Render Folders First
-        folderFiltered.forEach(folder => {
+        // 1. Render Folders
+        filteredFolders.forEach(folder => {
             const card = document.createElement('div');
-            card.className = 'folder-card';
+            card.className = 'board-card folder-card';
             card.dataset.id = folder.id;
             
-            const folderColor = folder.color || '#ccc';
-            const boardCount = this.boards.filter(b => b.folderId === folder.id && !b.deleted).length;
-            const subfolderCount = this.folders.filter(f => f.parentId === folder.id).length;
-            
-            let metaText = `${boardCount} ${window.i18n.t('notes')}`;
-            if (subfolderCount > 0) metaText += `, ${subfolderCount} ${window.i18n.t('folders')}`;
-
             card.innerHTML = `
-                <div class="folder-container">
-                    <div class="folder-tab" style="background: ${folderColor}; opacity: 0.3;"></div>
-                    <app-icon name="${folder.icon || 'folder'}" class="folder-icon-large" style="color: ${folderColor === '#ccc' ? 'inherit' : folderColor}"></app-icon>
-                    <div class="folder-menu-trigger">⋮</div>
+                <div class="folder-grid-icon-container">
+                    <app-icon name="folder-dashboard" class="folder-grid-icon"></app-icon>
                 </div>
-                <div class="folder-info">
-                    <div class="folder-title">${folder.name}</div>
-                    <div class="folder-meta">${metaText}</div>
+                <div class="board-info">
+                    <div class="board-title">${folder.name}</div>
+                    <div class="board-meta">
+                        <span data-i18n="folder">Klasör</span>
+                    </div>
                 </div>
             `;
             
-            card.onclick = () => this.switchView(folder.id);
+            card.onclick = () => {
+                this.switchView(folder.id);
+            };
             
             this.boardGrid.appendChild(card);
         });
 
-        boardFiltered.forEach(board => {
+        // 2. Render Boards
+        filteredBoards.forEach(board => {
             const card = document.createElement('div');
             card.className = `board-card ${this.selectedBoards.has(board.id) ? 'selected' : ''}`;
             card.dataset.id = board.id;
@@ -1519,7 +1531,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         const autosaveOptions = document.getElementById('autosaveOptions');
         if (autosaveOptions) {
             const radios = autosaveOptions.querySelectorAll('input[name="autosaveInterval"]');
-            const currentVal = this.viewSettings.autosaveInterval || '3000';
+            const currentVal = this.viewSettings.autosaveInterval || 'off';
             radios.forEach(radio => {
                 if (radio.value === currentVal) radio.checked = true;
                 radio.onchange = async () => {
@@ -1834,8 +1846,8 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             card.ondragend = () => card.classList.remove('dragging');
         });
 
-        // Add drop support to folder items in sidebar AND grid
-        document.querySelectorAll('.folder-item, .folder-card').forEach(folder => {
+        // Add drop support to folder items in sidebar
+        document.querySelectorAll('.folder-item').forEach(folder => {
             folder.ondragover = (e) => {
                 e.preventDefault();
                 folder.classList.add('drop-target');
@@ -1844,7 +1856,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             folder.ondrop = (e) => {
                 e.preventDefault();
                 const boardId = e.dataTransfer.getData('boardId');
-                const folderId = folder.dataset.view || folder.dataset.id;
+                const folderId = folder.dataset.view;
                 this.moveBoardToFolder(boardId, folderId);
                 folder.classList.remove('drop-target');
             };
@@ -2062,7 +2074,14 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 ? (obj) => ncilFM._deserializeObject(obj)
                 : (obj) => Promise.resolve(obj);
 
-            if (pages) {
+            if (pdfLoaded && (!pages || pages.length === 0)) {
+                console.log('[Dashboard] PDF loaded but no pages in savedData, initializing pages from PDF...');
+                // PDFManager loadPDF calls pageManager.pages = newPages automatically
+                // but we need to ensure the first page is active
+                if (this.app.pageManager) {
+                    this.app.pageManager.switchPage(0, true, false);
+                }
+            } else if (pages) {
                 console.log(`[Dashboard] ${pages.length} pages found in save file.`);
                 pages = await Promise.all(pages.map(async page => {
                     page.objects = await Promise.all((page.objects || []).map(obj => deserializeObj(obj)));
@@ -2104,7 +2123,10 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 }
             } else if (pdfLoaded) {
                 // If PDF loaded but no objects or pages in savedData
-                this.app.pageManager.switchPage(0, true, false);
+                console.log('[Dashboard] PDF loaded but no saved data, ensuring first page is active.');
+                if (this.app.pageManager) {
+                    this.app.pageManager.switchPage(0, true, false);
+                }
             }
         } else {
             console.log('[Dashboard] No saved content found, creating fresh board.');
@@ -2125,6 +2147,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                     this.app.pageManager.switchPage(0, true, false);
                 } else {
                     // If PDF is loaded but no saved content, ensure we are on page 1
+                    console.log('[Dashboard] PDF board, ensuring first page active.');
                     this.app.pageManager.switchPage(0, true, false);
                 }
             }
@@ -2325,7 +2348,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         if (force) {
             return await runSave();
         } else {
-            const interval = this.viewSettings.autosaveInterval || '3000';
+            const interval = this.viewSettings.autosaveInterval || 'off';
             
             // If autosave is off, don't schedule a periodic save
             if (interval === 'off') {
@@ -2389,8 +2412,12 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         }
 
         // Render immediately with cached board data so the grid appears right away
-        this.renderSidebar();
-        this.renderBoards();
+        if (this.currentView === 'calendar' && window.calendar) {
+            window.calendar.show();
+        } else {
+            this.renderSidebar();
+            this.renderBoards();
+        }
 
         // Run save + data refresh in the background after UI is visible
         const prevBoardId = this._lastOpenedBoardId;
@@ -3780,7 +3807,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             if (this.currentView === 'all') {
                 filtered = base;
             } else if (this.currentView === 'recent') {
-                filtered = [...base].sort((a, b) => b.lastModified - a.lastModified);
+                filtered = [...base].sort((a, b) => b.lastModified - a.lastModified).slice(0, 10);
             } else if (this.currentView === 'favorites') {
                 filtered = base.filter(b => b.favorite);
             } else if (this.currentView.startsWith('f_')) {
@@ -3853,6 +3880,45 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         });
     }
 
+    updateTodayNotesBadge() {
+        if (!this.todayNotesBadge || !this.todayNotesPopup) return;
+
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        
+        const todayNotes = (this.boards || []).filter(n => {
+            const noteDate = new Date(n.lastModified);
+            const nDateStr = `${noteDate.getFullYear()}-${String(noteDate.getMonth() + 1).padStart(2, '0')}-${String(noteDate.getDate()).padStart(2, '0')}`;
+            return nDateStr === dateStr && !n.deleted;
+        });
+
+        if (todayNotes.length > 0) {
+            this.todayNotesBadge.style.display = 'flex';
+            const countEl = this.todayNotesBadge.querySelector('.badge-count');
+            if (countEl) countEl.textContent = todayNotes.length;
+
+            // Render popup content
+            let popupHtml = `<div class="popup-title">${window.i18n.t('today_notes_count').replace('{count}', todayNotes.length)}</div>`;
+            popupHtml += todayNotes.map(n => `
+                <div class="popup-note-item" onclick="event.stopPropagation(); window.dashboard.loadBoard('${n.id}')">
+                    <span class="popup-note-dot" style="background:${n.coverBg || '#4dabf7'}"></span>
+                    <span class="popup-note-name" title="${n.name}">${n.name}</span>
+                </div>
+            `).join('');
+            this.todayNotesPopup.innerHTML = popupHtml;
+
+            // Click badge to go to calendar
+            this.todayNotesBadge.onclick = () => {
+                this.switchView('calendar');
+                if (window.calendar) {
+                    window.calendar.selectDate(dateStr);
+                }
+            };
+        } else {
+            this.todayNotesBadge.style.display = 'none';
+        }
+    }
+
     setupAutoSync() {
         if (!localStorage.getItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`)) return;
 
@@ -3866,25 +3932,27 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 el = document.createElement('div');
                 el.id = 'syncIndicator';
                 el.style.cssText = `
-                    position: fixed; top: 20px; right: 20px; z-index: 9999;
+                    position: fixed; bottom: 20px; right: 20px; z-index: 9999;
                     background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px);
                     padding: 8px 16px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
                     display: none; align-items: center; gap: 10px; font-size: 13px; font-weight: 500;
                     border: 1px solid rgba(255,255,255,0.3); transition: all 0.3s ease;
+                    transform: translateY(10px); opacity: 0;
                 `;
                 el.innerHTML = `
                     <div class="sync-spinner" style="width: 14px; height: 14px; border: 2px solid #4a90e2; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-                    <span class="sync-text">Bulutla Eşitleniyor...</span>
+                    <span class="sync-text">${window.i18n.t('syncing_with_cloud')}</span>
                 `;
                 document.body.appendChild(el);
             }
             return el;
         };
 
-        const showSync = (text = 'Bulutla Eşitleniyor...') => {
+        const showSync = (text = window.i18n.t('syncing_with_cloud')) => {
             const el = createSyncIndicator();
             el.querySelector('.sync-text').textContent = text;
             el.style.display = 'flex';
+            el.offsetHeight; // Force reflow
             el.style.opacity = '1';
             el.style.transform = 'translateY(0)';
         };
@@ -3893,7 +3961,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             const el = document.getElementById('syncIndicator');
             if (el) {
                 el.style.opacity = '0';
-                el.style.transform = 'translateY(-10px)';
+                el.style.transform = 'translateY(10px)';
                 setTimeout(() => { el.style.display = 'none'; }, 300);
             }
         };

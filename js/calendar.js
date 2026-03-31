@@ -17,6 +17,19 @@ class Calendar {
         this.initialized = true;
         this.setupDraggableBoards();
         this.observeDashboard();
+
+        // Listen for language changes to refresh calendar
+        window.addEventListener('languageChanged', () => {
+            if (this.visible) {
+                this.render();
+                this.renderSidebarNotes();
+                // Update breadcrumb
+                const breadcrumb = document.querySelector('.breadcrumb');
+                if (breadcrumb) breadcrumb.textContent = `${APP_CONFIG.NAME} / ${window.i18n.t('calendar')}`;
+                const pathText = document.getElementById('breadcrumbPathText');
+                if (pathText) pathText.textContent = `${APP_CONFIG.NAME} / ${window.i18n.t('calendar')}`;
+            }
+        });
     }
 
     get notes() {
@@ -145,8 +158,8 @@ class Calendar {
                 <div id="calendarContent" class="calendar-content-main"></div>
                 <div id="calendarSidebar" class="calendar-sidebar-panel">
                     <div class="sidebar-tabs">
-                        <button class="sidebar-tab-btn active" id="tabAllNotes" onclick="window.calendar.switchSidebarTab('all')">${window.i18n.t('all_notes')}</button>
-                        <button class="sidebar-tab-btn" id="tabDayNotes" onclick="window.calendar.switchSidebarTab('day')">${window.i18n.t('day_notes')}</button>
+                        <button class="sidebar-tab-btn active" id="tabAllNotes" onclick="window.calendar.switchSidebarTab('all')" data-i18n="all_notes">${window.i18n.t('all_notes')}</button>
+                        <button class="sidebar-tab-btn" id="tabDayNotes" onclick="window.calendar.switchSidebarTab('day')" data-i18n="day_notes">${window.i18n.t('day_notes')}</button>
                     </div>
                     <div id="calendarSidebarList" class="sidebar-panel-list"></div>
                 </div>
@@ -158,7 +171,8 @@ class Calendar {
         if (container) {
             container.style.display = 'flex'; // Use flex for side-by-side
             this.render();
-            this.renderSidebarNotes();
+            // Tab durumunu ve listeyi güncelle
+            this.switchSidebarTab(this.sidebarTab);
         }
         
         const breadcrumb = document.querySelector('.breadcrumb');
@@ -192,7 +206,7 @@ class Calendar {
         }
 
         sidebarList.innerHTML = notesToShow.map(n => `
-            <div class="sidebar-note-item" draggable="true" data-id="${n.id}">
+            <div class="sidebar-note-item" draggable="true" data-id="${n.id}" onclick="window.calendar.openNote('${n.id}')">
                 <div class="note-item-dot" style="background:${n.coverBg || this.themeColor}"></div>
                 <div class="note-item-title">${n.name}</div>
             </div>
@@ -217,6 +231,16 @@ class Calendar {
         document.getElementById('tabAllNotes').classList.toggle('active', tab === 'all');
         document.getElementById('tabDayNotes').classList.toggle('active', tab === 'day');
         this.renderSidebarNotes();
+    }
+
+    openNote(id) {
+        // Dragging ise açma (biraz tolerans payı bırakılabilir ama şimdilik direkt kontrol)
+        const draggingItem = document.querySelector('.sidebar-note-item.dragging');
+        if (draggingItem) return;
+
+        if (this.app.dashboard) {
+            this.app.dashboard.loadBoard(id);
+        }
     }
 
     hide() {
@@ -347,7 +371,7 @@ class Calendar {
             const calendarNavItem = document.createElement('div');
             calendarNavItem.className = 'nav-item';
             calendarNavItem.id = 'navCalendar';
-            calendarNavItem.innerHTML = `<app-icon name="calendar" class="nav-icon"></app-icon><span>${window.i18n.t('calendar')}</span>`;
+            calendarNavItem.innerHTML = `<app-icon name="calendar" class="nav-icon"></app-icon><span data-i18n="calendar">${window.i18n.t('calendar')}</span>`;
             calendarNavItem.onclick = () => {
                 if (window.app && window.app.dashboard) {
                     window.app.dashboard.switchView('calendar');

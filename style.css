@@ -7,6 +7,7 @@
 :root {
     --app-icon-color: #616161;
     --app-icon-active-color: var(--app-icon-color);
+    --app-icon-darker: color-mix(in srgb, var(--app-icon-color), black 25%);
     /* Derived colors for hover and active backgrounds */
     --app-icon-active-bg: color-mix(in srgb, var(--app-icon-color), transparent 88%);
     --app-icon-hover-bg: color-mix(in srgb, var(--app-icon-color), transparent 94%);
@@ -4455,6 +4456,8 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border-color);
+    position: relative;
+    z-index: 100;
 }
 
 .breadcrumb {
@@ -4606,101 +4609,6 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
     padding: 10px;
 }
 
-/* Folder Card Styles for Grid */
-.folder-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    padding: 0;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.folder-card:hover {
-    transform: translateY(-4px);
-}
-
-.folder-card .folder-container {
-    width: 100%;
-    aspect-ratio: 3/2.2;
-    position: relative;
-    background: #f8f9fa;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    overflow: visible;
-    transition: all 0.2s;
-}
-
-.folder-card:hover .folder-container {
-    background: #ffffff;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-    border-color: var(--app-icon-active-color);
-}
-
-.folder-card .folder-tab {
-    position: absolute;
-    top: -10px;
-    left: 12px;
-    width: 40%;
-    height: 14px;
-    background: inherit;
-    border-radius: 6px 6px 0 0;
-    border: 1px solid var(--border-color);
-    border-bottom: none;
-    z-index: -1;
-}
-
-.folder-card:hover .folder-tab {
-    border-color: var(--app-icon-active-color);
-}
-
-.folder-card .folder-icon-large {
-    width: 48px;
-    height: 48px;
-    opacity: 0.8;
-    color: var(--app-icon-color);
-}
-
-.folder-card .folder-info {
-    padding: 12px 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.folder-card .folder-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.folder-card .folder-meta {
-    font-size: 11px;
-    color: var(--text-secondary);
-    opacity: 0.7;
-}
-
-.folder-card .folder-menu-trigger {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    opacity: 0;
-    z-index: 10;
-}
-
-.folder-card:hover .folder-menu-trigger {
-    opacity: 0.6;
-}
-
 .board-card.dragging {
     opacity: 0.4;
     transform: scale(0.95);
@@ -4743,6 +4651,33 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
     justify-content: center;
     overflow: hidden;
     padding: 20px;
+}
+
+/* Folder Cover Style for Grid */
+.folder-grid-icon-container {
+    width: 100%;
+    aspect-ratio: 1/1.3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+.folder-grid-icon {
+    width: 96px;
+    height: 96px;
+    color: var(--app-icon-color);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.board-card.folder-card {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.board-card.folder-card:hover .folder-grid-icon {
+    transform: scale(1.1) translateY(-5px);
 }
 
 .notebook-spine {
@@ -7761,4 +7696,111 @@ body.toolbar-collision:not(.toolbar-is-vertical) .properties-sidebar {
 .toolbar-is-vertical .val-badge-box {
     transform: rotate(-90deg);
     margin: 0 !important;
+}
+
+/* Today's Notes Badge & Popup */
+.today-notes-badge {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #4dabf7;
+    color: white;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: 8px;
+    box-shadow: 0 2px 8px rgba(77, 171, 247, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.today-notes-badge:hover {
+    background: #339af0;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(77, 171, 247, 0.4);
+}
+
+.today-notes-badge:hover .today-notes-popup {
+    display: block;
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.badge-icon {
+    width: 14px;
+    height: 14px;
+    color: white;
+}
+
+.today-notes-popup {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px;
+    min-width: 180px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    z-index: 100000;
+    display: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
+    color: var(--text-primary);
+}
+
+.today-notes-popup::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
+}
+
+.popup-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 4px;
+}
+
+.popup-note-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 13px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.popup-note-item:hover {
+    background: var(--nav-item-hover);
+}
+
+.popup-note-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.popup-note-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

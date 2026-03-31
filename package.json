@@ -1,6 +1,6 @@
 {
   "name": "notencil",
-  "version": "1.0.5.1",
+  "version": "1.0.6",
   "description": "Profesyonel Dijital Beyaz Tahta ve Not Alma Uygulaması",
   "main": "main.js",
   "scripts": {
@@ -32,7 +32,13 @@
       "target": "nsis"
     },
     "mac": {
-      "target": "dmg"
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
     },
     "linux": {
       "target": "AppImage"

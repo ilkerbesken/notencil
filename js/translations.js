@@ -19,16 +19,6 @@ class I18nManager {
     }
 
     async loadLanguage(lang) {
-        if (window.location.protocol === 'file:') {
-            console.warn('I18n: "file://" protokolü üzerinden JSON dosyaları yüklenemez (CORS kısıtlaması). Lütfen bir yerel sunucu kullanın.');
-            // Basic fallback for TR to keep UI functional
-            if (lang === 'tr') {
-                this.data = { "language": "Dil", "settings": "Ayarlar", "new_note": "Yeni Not" }; // ... add more if needed
-                this.isLoaded = true;
-                return true;
-            }
-            return false;
-        }
         try {
             const response = await fetch(`./locales/${lang}.json`);
             if (!response.ok) throw new Error(`Could not load language: ${lang}`);
