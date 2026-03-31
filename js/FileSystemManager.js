@@ -243,7 +243,7 @@ class FileSystemManager {
     // CRUD Operasyonları
     // ─────────────────────────────────────────────
 
-    async saveItem(key, value, skipNative = false) {
+    async saveItem(key, value, skipNative = false, fromSync = false) {
         // 1. Yapı cache'ini güncelle
         this._updateStructureCache(key, value);
 
@@ -253,7 +253,9 @@ class FileSystemManager {
         // 3. Sync metadata güncelle ve OPFS'e yaz
         if (key.startsWith('wb_content_')) {
             const boardId = key.replace('wb_content_', '');
-            await this.updateSyncMetadata(boardId);
+            if (!fromSync) {
+                await this.updateSyncMetadata(boardId);
+            }
             
             // OPFS Yazma (Büyük dosyalar için performanslı)
             if (window.opfsManager) {
@@ -275,7 +277,7 @@ class FileSystemManager {
             await this._saveToNative(key, value);
         }
 
-        if (this.onSave) this.onSave(key, value);
+        if (this.onSave && !fromSync) this.onSave(key, value);
     }
 
     /**

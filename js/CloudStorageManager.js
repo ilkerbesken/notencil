@@ -189,7 +189,11 @@ class CloudStorageManager {
             // LINKING: Eğer yerelde board varsa ama Drive ID'si eşleşmemişse, eşleştir
             if (lb && !meta?.googleDriveFileId && rb.googleDriveFileId) {
                 console.log(`[CloudSync] Mevcut yerel not Drive dosyasıyla eşleştirildi: ${lb.name}`);
-                await fsm.setSyncMetadata(rb.id, { googleDriveFileId: rb.googleDriveFileId, lastSyncedTime: Date.now() });
+                const now = Date.now();
+                await fsm.setSyncMetadata(rb.id, { 
+                    googleDriveFileId: rb.googleDriveFileId, 
+                    lastSyncedTime: Math.max(now, lb.lastModified || 0) 
+                });
             }
 
             if (needsPull) {
@@ -200,11 +204,11 @@ class CloudStorageManager {
                         await Utils.db.save(rb.id, content.blob);
                         // Minimal bir board içeriği oluştur
                         const minimal = { version: "2.1", pages: [], pdfBase64: null, objects: [] };
-                        await fsm.saveItem(`wb_content_${rb.id}`, minimal, true);
+                        await fsm.saveItem(`wb_content_${rb.id}`, minimal, true, true);
                         rb.isPDF = true;
                         rb.alwaysSaveAsPDF = true;
                     } else {
-                        await fsm.saveItem(`wb_content_${rb.id}`, content, true);
+                        await fsm.saveItem(`wb_content_${rb.id}`, content, true, true);
                         
                         // Eğer bu bir PDF board ise, Drive'dan PDF'i de çek (Çevrimdışı erişim için)
                         if (rb.isPDF) {
@@ -220,10 +224,6 @@ class CloudStorageManager {
                                     await Utils.db.save(rb.id, pdfBlob);
                                     rb.isPDF = true; // Meta veriyi doğrula
                                     console.log('[CloudSync] Gömülü PDF başarıyla ayıklandı ve DB\'ye kaydedildi:', rb.id);
-                                    
-                                    // Bloat'u temizle: PDF artık DB'de, JSON içeriğinde kalmasına gerek yok
-                                    content.pdfBase64 = null;
-                                    await fsm.saveItem(`wb_content_${rb.id}`, content, true);
                                 }
                             } catch (e) {
                                 console.error('[CloudSync] PDF ayıklama hatası:', e);
@@ -232,14 +232,18 @@ class CloudStorageManager {
                     }
                     const idx = localBoards.findIndex(b => b.id === rb.id);
                     if (idx !== -1) localBoards[idx] = rb; else localBoards.push(rb);
-
-                    // Sync Metadata'yı mühürle (Mükerrer push'u önlemek için)
+                    
+                    // ÖNEMLİ: İndirme sonrası SyncMetadata'yı güncelle
+                    // Hem googleDriveFileId'yi mühürle hem de lastSyncedTime'ı güncelle ki
+                    // az önce indirdiğimiz dosyayı hemen geri yüklemeye çalışmayalım.
+                    const syncId = rb.isRawSource ? null : (rb.googleDriveFileId || meta?.googleDriveFileId);
+                    const now = Date.now();
                     await fsm.setSyncMetadata(rb.id, { 
-                        googleDriveFileId: rb.googleDriveFileId || meta?.googleDriveFileId, 
-                        lastSyncedTime: Date.now(),
-                        lastModifiedLocally: rb.lastModified // Yerel saati remote saatine eşitle
+                        googleDriveFileId: syncId, 
+                        lastSyncedTime: Math.max(now, rb.lastModified || 0),
+                        lastModifiedLocally: rb.lastModified || now
                     });
-
+                    
                     count++;
                 }
             } else if (rb.isPDF) {
@@ -252,18 +256,23 @@ class CloudStorageManager {
                 }
             }
             
-            // Drive ID'sini mühürle
-            if (isDiscoveryMode && rb.googleDriveFileId) {
-                // SADECE ham kaynak değilse ID'yi mühürle. 
-                // Ham kaynaksa ID mühürlenmezse ilk push yeni dosya (.ncil) oluşturur, orijinal PDF korunur.
-                const syncId = rb.isRawSource ? null : rb.googleDriveFileId;
-                await fsm.setSyncMetadata(rb.id, { googleDriveFileId: syncId, lastSyncedTime: Date.now() });
+            // Link existing boards that don't have Drive ID yet
+            if (lb && !meta?.googleDriveFileId && rb.googleDriveFileId && !rb.isRawSource) {
+                console.log(`[CloudSync] Mevcut yerel not Drive dosyasıyla eşleştirildi: ${lb.name}`);
+                lb.googleDriveFileId = rb.googleDriveFileId;
+                const now = Date.now();
+                await fsm.setSyncMetadata(rb.id, { 
+                    googleDriveFileId: rb.googleDriveFileId, 
+                    lastSyncedTime: Math.max(now, lb.lastModified || 0),
+                    lastModifiedLocally: lb.lastModified
+                });
+                count++;
             }
         }
 
         if (count > 0) {
-            await fsm.saveItem('wb_boards', localBoards, true);
-            await fsm.saveItem('wb_folders', localFolders, true);
+            await fsm.saveItem('wb_boards', localBoards, true, true);
+            await fsm.saveItem('wb_folders', localFolders, true, true);
         }
         return count;
     }
@@ -295,11 +304,11 @@ class CloudStorageManager {
             }
 
             // PDF boards: Always ensure PDF background is on Drive, even if metadata seems synced
-            // but ONLY if we are in discovery or metadata is missing.
-            // For regular changes, rely on needsPush.
+            // because the background PDF might have been missed in previous versions.
+            // OR if it's explicitly a PDF but has no Drive ID for the PDF part.
             const needsPush = !meta.googleDriveFileId || (meta.lastModifiedLocally > (meta.lastSyncedTime || 0));
             
-            if (needsPush || (board.isPDF && !meta.googleDriveFileId)) {
+            if (board.isPDF || needsPush) {
                 console.log(`[CloudSync] İşleniyor: ${board.name}...`);
                 let content = await fsm.getItem(`wb_content_${board.id}`, null);
                 
@@ -390,7 +399,16 @@ class CloudStorageManager {
                         }
 
                         if (driveFileId) {
-                            await fsm.setSyncMetadata(board.id, { googleDriveFileId: driveFileId, lastSyncedTime: Date.now() });
+                            const now = Date.now();
+                            // Son senkronizasyon zamanını hem yerel hem de Drive saatinin üzerine çıkarıyoruz
+                            await fsm.setSyncMetadata(board.id, { 
+                                googleDriveFileId: driveFileId, 
+                                lastSyncedTime: Math.max(now, board.lastModified || 0)
+                            });
+                            
+                            // Board objesine de Drive ID'sini ekle (Manifeste dahil olması için)
+                            board.googleDriveFileId = driveFileId;
+                            
                             count++;
                             console.log(`[CloudSync] Başarıyla yüklendi: ${board.name} (Drive ID: ${driveFileId})`);
                         }
@@ -400,6 +418,12 @@ class CloudStorageManager {
                 }
             }
         }
+
+        if (count > 0) {
+             // Değişiklikleri yerel listeye kaydet (googleDriveFileId vb.)
+             await fsm.saveItem('wb_boards', boards, true, true);
+         }
+
         console.log(`[CloudSync] Toplam ${count} not Drive'a yüklendi.`);
         return count;
     }
@@ -649,35 +673,19 @@ class CloudStorageManager {
     }
 
     async _uploadRawToDrive(name, bytes, mime, folderId, existingId, appProps = {}) {
-        const boundary = '-------314159265358979323846';
-        const delimiter = "\r\n--" + boundary + "\r\n";
-        const close_delim = "\r\n--" + boundary + "--";
-
+        // Multipart upload GAPI client'da biraz karmaşık olduğu için manual fetch (v3) kullanmaya devam ediyoruz
+        // Ancak token'ı GAPI'den alıyoruz
         const metadata = existingId ? { name, appProperties: appProps } : { name, parents: [folderId], appProperties: appProps };
         const url = existingId ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-
-        const metadataPart = JSON.stringify(metadata);
         
-        // Construct the multipart/related body manually
-        // This is more reliable than FormData for Google Drive API v3
-        const header = delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + metadataPart + delimiter + 'Content-Type: ' + mime + '\r\n\r\n';
-        const footer = close_delim;
-
-        const bodySize = header.length + bytes.byteLength + footer.length;
-        const body = new Uint8Array(bodySize);
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', new Blob([bytes], { type: mime }));
         
-        const encoder = new TextEncoder();
-        body.set(encoder.encode(header), 0);
-        body.set(new Uint8Array(bytes), header.length);
-        body.set(encoder.encode(footer), header.length + bytes.byteLength);
-
         const res = await fetch(url, { 
             method: existingId ? 'PATCH' : 'POST', 
-            headers: { 
-                Authorization: `Bearer ${this.gdriveToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            }, 
-            body: body
+            headers: { Authorization: `Bearer ${this.gdriveToken}` }, 
+            body: form 
         });
 
         if (!res.ok) {
