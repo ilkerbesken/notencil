@@ -367,13 +367,18 @@ class FileSystemManager {
         // İçeriği hazırla — NcilFileManager gibi gzip ile sıkıştır
         await this._ensurePako();
 
+        // Serialize content before zipping (rounding coordinates, pressure, opacity, etc.)
+        const serialized = (window.app && window.app.ncilFileManager) 
+            ? await window.app.ncilFileManager.serializeContent(value, boardId) 
+            : value;
+
         const content = JSON.stringify({
-            version: value.version || '2.1',
+            version: serialized.version || '2.1',
             format: 'ncil',
             savedAt: new Date().toISOString(),
-            pages: value.pages || null,
-            objects: value.objects || null,
-            pdfBase64: value.pdfBase64 || null
+            pages: serialized.pages || null,
+            objects: serialized.objects || null,
+            pdfBase64: serialized.pdfBase64 || null
         });
 
         let binaryData;
@@ -806,7 +811,8 @@ class FileSystemManager {
                         coverBg: isPDF ? '#fa5252' : '#4a90e2',
                         coverTexture: isPDF ? 'dots' : 'linear',
                         isPDF: isPDF,
-                        alwaysSaveAsPDF: isPDF
+                        alwaysSaveAsPDF: isPDF,
+                        isRawSource: isPDF // PDF ise ham kaynak olarak işaretle (Drive'da .pdf olarak kalsın)
                     };
 
                     // Klasör hiyerarşisini canlandır

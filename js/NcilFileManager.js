@@ -179,7 +179,10 @@ class NcilFileManager {
             }
         }
 
-        const jsonStr = JSON.stringify(content);
+        // Serialize content before zipping (rounding coordinates, flattening points, etc.)
+        const serialized = this.serializeContent(content);
+
+        const jsonStr = JSON.stringify(serialized);
         const compressed = pako.gzip(jsonStr);
         const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE);
         const finalData = new Uint8Array(header.length + compressed.length);
@@ -187,6 +190,51 @@ class NcilFileManager {
         finalData.set(compressed, header.length);
 
         return new Blob([finalData], { type: APP_CONFIG.MIME_TYPE });
+    }
+
+    /**
+     * Bir board içeriğini .ncil formatına hazırlamak için serileştirir.
+     * Basınç, opaklık, yuvarlama ve koordinat hassasiyetini ayarlar.
+     * PDF arka planı eksikse otomatik olarak ekler.
+     */
+    async serializeContent(content, boardId = null) {
+        if (!content) return content;
+        
+        // Derin kopya — orijinal nesneyi değiştirme
+        const c = Utils.deepClone(content);
+
+        if (c.pages) {
+            c.pages = c.pages.map(page => {
+                if (page.objects) {
+                    page.objects = page.objects.map(obj => this._serializeObject(obj));
+                }
+                // Thumbnail runtime verisidir, dosyaya yazma
+                delete page.thumbnail;
+                return page;
+            });
+        } else if (c.objects) {
+            c.objects = c.objects.map(obj => this._serializeObject(obj));
+        }
+
+        // PDF arka planını dahil et (Eğer eksikse ve boardId varsa)
+        const effectiveId = boardId || c.id || window.dashboard?.currentBoardId;
+        if (!c.pdfBase64 && effectiveId) {
+            // Board'un gerçekten PDF olup olmadığını kontrol et (Performans için gereksiz DB okumasını önle)
+            const board = window.dashboard?.boards.find(b => b.id === effectiveId);
+            if (board && board.isPDF) {
+                try {
+                    const pdfBlob = await Utils.db.get(effectiveId);
+                    if (pdfBlob instanceof Blob) {
+                        c.pdfBase64 = await this._blobToBase64(pdfBlob);
+                        console.log('[NcilFileManager] PDF arka planı içeriğe dahil edildi:', effectiveId);
+                    }
+                } catch (e) {
+                    console.warn('[NcilFileManager] PDF arka planı alınamadı:', e);
+                }
+            }
+        }
+
+        return c;
     }
 
     /**
