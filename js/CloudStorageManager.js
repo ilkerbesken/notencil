@@ -186,6 +186,12 @@ class CloudStorageManager {
                 needsPull = true;
             }
 
+            // LINKING: Eğer yerelde board varsa ama Drive ID'si eşleşmemişse, eşleştir
+            if (lb && !meta?.googleDriveFileId && rb.googleDriveFileId) {
+                console.log(`[CloudSync] Mevcut yerel not Drive dosyasıyla eşleştirildi: ${lb.name}`);
+                await fsm.setSyncMetadata(rb.id, { googleDriveFileId: rb.googleDriveFileId, lastSyncedTime: Date.now() });
+            }
+
             if (needsPull) {
                 const content = await this._downloadBoardById(rb.id, rb.googleDriveFileId || meta?.googleDriveFileId);
                 if (content) {
@@ -354,6 +360,11 @@ class CloudStorageManager {
                             // Normal board veya üzerine not alınmış PDF (.ncil sidecar)
                             let targetIdForUpload = meta.googleDriveFileId;
                             
+                            // Eğer Drive ID'si yoksa, aynı boardId ile Drive'da dosya var mı kontrol et (Mükerrerliği önle)
+                            if (!targetIdForUpload) {
+                                targetIdForUpload = await this._findFileByBoardId(board.id, targetParentId);
+                            }
+
                             // Eğer meta ID'si bir PDF'e işaret ediyorsa ama biz NCIL yüklemek istiyorsak, 
                             // ID'yi null yapıp yeni dosya oluşturmalıyız (orijinal PDF'i ezmemek için)
                             if (board.isPDF && targetIdForUpload) {
@@ -515,6 +526,21 @@ class CloudStorageManager {
         });
         const f = await cRes.json();
         return f.id;
+    }
+
+    async _findFileByBoardId(boardId, parentId = null) {
+        try {
+            const q = `appProperties has { key='boardId' and value='${boardId}' } and trashed=false${parentId ? ` and '${parentId}' in parents` : ''}`;
+            const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+                headers: { Authorization: `Bearer ${this.gdriveToken}` }
+            });
+            const data = await res.json();
+            return data.files?.[0]?.id || null;
+        } catch (e) {
+            console.warn('[CloudSync] Board ID ile dosya arama hatası:', e);
+            return null;
+        }
     }
 
     async _findOrCreateFolderInList(name, parentId, folderId) {
