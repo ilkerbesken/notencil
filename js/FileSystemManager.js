@@ -372,7 +372,14 @@ class FileSystemManager {
             ? await window.app.ncilFileManager.serializeContent(value, boardId) 
             : value;
 
-        const content = JSON.stringify(serialized);
+        const content = JSON.stringify({
+            version: serialized.version || '2.1',
+            format: 'ncil',
+            savedAt: new Date().toISOString(),
+            pages: serialized.pages || null,
+            objects: serialized.objects || null,
+            pdfBase64: serialized.pdfBase64 || null
+        });
 
         let binaryData;
         if (typeof pako !== 'undefined') {
