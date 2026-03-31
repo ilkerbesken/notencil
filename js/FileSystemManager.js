@@ -806,7 +806,8 @@ class FileSystemManager {
                         coverBg: isPDF ? '#fa5252' : '#4a90e2',
                         coverTexture: isPDF ? 'dots' : 'linear',
                         isPDF: isPDF,
-                        alwaysSaveAsPDF: isPDF
+                        alwaysSaveAsPDF: isPDF,
+                        isRawSource: isPDF // PDF ise ham kaynak olarak işaretle (Drive'da .pdf olarak kalsın)
                     };
 
                     // Klasör hiyerarşisini canlandır
