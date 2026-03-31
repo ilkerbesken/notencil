@@ -1,6 +1,6 @@
 {
   "name": "notencil",
-  "version": "1.0.12",
+  "version": "1.0.14",
   "description": "Profesyonel Dijital Beyaz Tahta ve Not Alma Uygulaması",
   "main": "main.js",
   "scripts": {
@@ -29,7 +29,8 @@
       "!tab-test.html"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icons/icon.ico"
     },
     "mac": {
       "target": {
@@ -38,10 +39,12 @@
           "x64",
           "arm64"
         ]
-      }
+      },
+      "icon": "assets/icons/icon.icns"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "assets/icons/icon.png"
     }
   }
 }
