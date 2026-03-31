@@ -28,6 +28,7 @@ class CloudStorageManager {
         this._activeSyncs = new Set();
         this._syncQueue = []; // Bekleyen işlemler kuyruğu
         this._isQueueProcessing = false;
+        this._driveFolderCache = new Map(); // Klasör ID eşleşmelerini önbelleğe al
     }
 
     // ─── Google API & Identity Services ──────────────────────────
@@ -82,6 +83,7 @@ class CloudStorageManager {
         if (targetId && this._activeSyncs?.has(targetId)) return { success: false, message: 'Öğe zaten senkronize ediliyor.' };
         
         if (targetId) this._activeSyncs.add(targetId); else this.isSyncing = true;
+        this._driveFolderCache.clear();
 
         try {
             await this._ensureToken();
@@ -246,8 +248,18 @@ class CloudStorageManager {
 
         // 2. "Kirli" boardları bul ve gönder
         for (const board of boards) {
-            const meta = await fsm.getSyncMetadata(board.id);
-            if (!meta) continue;
+            let meta = await fsm.getSyncMetadata(board.id);
+            
+            // Eğer meta yoksa (yeni yerel import), varsayılan bir meta oluştur ve push et
+            if (!meta) {
+                meta = { 
+                    id: board.id, 
+                    googleDriveFileId: null, 
+                    lastSyncedTime: 0, 
+                    lastModifiedLocally: board.lastModified || Date.now() 
+                };
+                await fsm.setSyncMetadata(board.id, meta);
+            }
 
             const needsPush = !meta.googleDriveFileId || (meta.lastModifiedLocally > (meta.lastSyncedTime || 0));
             if (needsPush) {
@@ -359,21 +371,51 @@ class CloudStorageManager {
     }
 
     async _findOrCreateFolderInList(name, parentId, folderId) {
-        const q = `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-        const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        if (this._driveFolderCache.has(folderId)) return this._driveFolderCache.get(folderId);
+
+        // 1. Önce appProperties içindeki folderId (yerel unique ID) ile ara
+        const qId = `appProperties has { key='folderId' and value='${folderId}' } and trashed=false`;
+        const paramsId = new URLSearchParams({ q: qId, fields: 'files(id, name, parents)', pageSize: '1' });
+        const resId = await fetch(`https://www.googleapis.com/drive/v3/files?${paramsId}`, {
             headers: { Authorization: `Bearer ${this.gdriveToken}` }
         });
-        const data = await res.json();
-        if (data.files?.[0]) return data.files[0].id;
+        const dataId = await resId.json();
+        
+        if (dataId.files?.[0]) {
+            const f = dataId.files[0];
+            // Eğer ebeveyn değişmişse (opsiyonel ama tutarlılık için iyi)
+            // if (!f.parents?.includes(parentId)) { ... move logic ... }
+            this._driveFolderCache.set(folderId, f.id);
+            return f.id;
+        }
 
-        const body = { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId], appProperties: { folderId, type: 'folder' } };
+        // 2. Bulunamazsa name ve parentId ile ara (Eski sürümler veya manuel oluşturulanlar için)
+        const qName = `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        const paramsName = new URLSearchParams({ q: qName, fields: 'files(id)', pageSize: '1' });
+        const resName = await fetch(`https://www.googleapis.com/drive/v3/files?${paramsName}`, {
+            headers: { Authorization: `Bearer ${this.gdriveToken}` }
+        });
+        const dataName = await resName.json();
+        
+        if (dataName.files?.[0]) {
+            this._driveFolderCache.set(folderId, dataName.files[0].id);
+            return dataName.files[0].id;
+        }
+
+        // 3. Hiç bulunamazsa oluştur
+        const body = { 
+            name, 
+            mimeType: 'application/vnd.google-apps.folder', 
+            parents: [parentId], 
+            appProperties: { folderId, type: 'folder' } 
+        };
         const cRes = await fetch('https://www.googleapis.com/drive/v3/files', {
             method: 'POST',
             headers: { Authorization: `Bearer ${this.gdriveToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
         const f = await cRes.json();
+        this._driveFolderCache.set(folderId, f.id);
         return f.id;
     }
 
