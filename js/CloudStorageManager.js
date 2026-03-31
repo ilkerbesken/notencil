@@ -247,6 +247,7 @@ class CloudStorageManager {
         const driveFolderMapping = await this._ensureDriveFoldersRobust(folders, appFolderId);
 
         // 2. "Kirli" boardları bul ve gönder
+        console.log(`[CloudSync] ${boards.length} not kontrol ediliyor...`);
         for (const board of boards) {
             let meta = await fsm.getSyncMetadata(board.id);
             
@@ -263,7 +264,16 @@ class CloudStorageManager {
 
             const needsPush = !meta.googleDriveFileId || (meta.lastModifiedLocally > (meta.lastSyncedTime || 0));
             if (needsPush) {
+                console.log(`[CloudSync] Yükleniyor: ${board.name}...`);
                 let content = await fsm.getItem(`wb_content_${board.id}`, null);
+                
+                // Eğer içerik henüz yoksa (örneğin yerel klasörden yeni içe aktarılmışsa)
+                // skeleton bir içerik oluşturuyoruz.
+                if (!content) {
+                    content = { version: "2.1", pages: [], pdfBase64: null, objects: [] };
+                    console.log(`[CloudSync] Not için skeleton içerik oluşturuldu: ${board.name}`);
+                }
+
                 if (content) {
                     // Drive'a gönderirken eğer PDF ise ve base64 yoksa, DB'den çekip ekle
                     // Çünkü diğer cihazlarda bu PDF olmayabilir.
@@ -272,17 +282,26 @@ class CloudStorageManager {
                         if (pdfBlob && pdfBlob instanceof Blob) {
                             if (this.app.ncilFileManager) {
                                 content.pdfBase64 = await this.app.ncilFileManager._blobToBase64(pdfBlob);
+                                console.log(`[CloudSync] PDF base64'e dönüştürüldü: ${board.name}`);
                             }
+                        } else {
+                            console.warn(`[CloudSync] PDF blob bulunamadı: ${board.name}`);
                         }
                     }
 
                     const targetParentId = board.folderId ? driveFolderMapping[board.folderId] : appFolderId;
-                    const driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, meta.googleDriveFileId);
-                    await fsm.setSyncMetadata(board.id, { googleDriveFileId: driveFileId, lastSyncedTime: Date.now() });
-                    count++;
+                    try {
+                        const driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, meta.googleDriveFileId, targetParentId);
+                        await fsm.setSyncMetadata(board.id, { googleDriveFileId: driveFileId, lastSyncedTime: Date.now() });
+                        count++;
+                        console.log(`[CloudSync] Başarıyla yüklendi: ${board.name} (Drive ID: ${driveFileId})`);
+                    } catch (err) {
+                        console.error(`[CloudSync] ${board.name} yükleme hatası:`, err);
+                    }
                 }
             }
         }
+        console.log(`[CloudSync] Toplam ${count} not Drive'a yüklendi.`);
         return count;
     }
 
@@ -455,12 +474,19 @@ class CloudStorageManager {
             headers: { Authorization: `Bearer ${this.gdriveToken}` }, 
             body: form 
         });
+
+        if (!res.ok) {
+            const errData = await res.json();
+            console.error('[CloudSync] Upload hatası:', name, errData);
+            throw new Error(`Drive yükleme hatası (${res.status}): ${errData.error?.message || 'Bilinmeyen hata'}`);
+        }
+
         const r = await res.json(); 
         return r.id;
     }
 
-    async _uploadBoardNcil(board, content, folders, appFolderId, existingId) {
-        const targetId = board.folderId ? await this._getDriveTargetFolderRobust(board.folderId, folders, appFolderId) : appFolderId;
+    async _uploadBoardNcil(board, content, folders, appFolderId, existingId, targetParentId = null) {
+        const targetId = targetParentId || (board.folderId ? await this._getDriveTargetFolderRobust(board.folderId, folders, appFolderId) : appFolderId);
         const bytes = await this._contentToNcil(content, board.id);
         const name = board.isPDF ? `${board.name}.pdf.ncil` : `${board.name}.ncil`; 
         const type = board.isPDF ? 'pdf' : 'board';
