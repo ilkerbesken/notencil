@@ -291,7 +291,36 @@ class CloudStorageManager {
 
                     const targetParentId = board.folderId ? driveFolderMapping[board.folderId] : appFolderId;
                     try {
-                        const driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, meta.googleDriveFileId, targetParentId);
+                        let driveFileId;
+                        if (board.isRawSource && board.isPDF) {
+                            // 1. Ham PDF'i Drive'a yükle (Orijinal format korunur)
+                            const pdfBlob = await Utils.db.get(board.id);
+                            if (pdfBlob && pdfBlob instanceof Blob) {
+                                const bytes = new Uint8Array(await pdfBlob.arrayBuffer());
+                                driveFileId = await this._uploadRawToDrive(`${board.name}.pdf`, bytes, 'application/pdf', targetParentId, meta.googleDriveFileId, { boardId: board.id, type: 'pdf', isRaw: 'true' });
+                                console.log(`[CloudSync] Ham PDF yüklendi: ${board.name}.pdf`);
+                            } else {
+                                throw new Error('PDF verisi bulunamadı.');
+                            }
+                        } else {
+                            // 2. Normal board veya üzerine not alınmış PDF (.ncil sidecar)
+                            // GÜVENLİK: Eğer bu daha önce ham bir PDF olarak yüklendiyse (veya isim .pdf ile bitiyorsa)
+                            // Orijinal PDF'i ezmemek için existingId'yi null yapıp yeni bir .ncil dosyası oluşturuyoruz.
+                            let targetIdForUpload = meta.googleDriveFileId;
+                            if (board.isPDF && targetIdForUpload) {
+                                // Drive'daki dosya ismini kontrol edip eğer .pdf ise existingId'yi null yapmalıyız
+                                // (Daha sağlam olması için metadata'daki 'type' veya 'isRaw' özelliğine bakıyoruz)
+                                const isActualSidecar = await this._checkIfFileIsNcil(targetIdForUpload);
+                                if (!isActualSidecar) {
+                                    targetIdForUpload = null; // Yeni bir .ncil dosyası oluştur (sidecar)
+                                    console.log(`[CloudSync] Sidecar oluşturuluyor (Orijinal PDF korunacak): ${board.name}`);
+                                }
+                            }
+
+                            driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, targetIdForUpload, targetParentId);
+                            console.log(`[CloudSync] Board/Ncil yüklendi: ${board.name} (.ncil)`);
+                        }
+
                         await fsm.setSyncMetadata(board.id, { googleDriveFileId: driveFileId, lastSyncedTime: Date.now() });
                         count++;
                         console.log(`[CloudSync] Başarıyla yüklendi: ${board.name} (Drive ID: ${driveFileId})`);
@@ -457,6 +486,19 @@ class CloudStorageManager {
         const existingId = data.files?.[0]?.id;
 
         await this._uploadRawToDrive(APP_CONFIG.MANIFEST_FILE, new TextEncoder().encode(JSON.stringify(manifest, null, 2)), 'application/json', folderId, existingId);
+    }
+
+    async _checkIfFileIsNcil(fileId) {
+        try {
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,appProperties`, {
+                headers: { Authorization: `Bearer ${this.gdriveToken}` }
+            });
+            const data = await res.json();
+            // Eğer metadata'da type='board' veya 'pdf' (bizim sidecar'ımız) varsa veya isim .ncil ile bitiyorsa
+            return data.name?.toLowerCase().endsWith('.ncil') || data.appProperties?.type === 'board' || data.appProperties?.type === 'pdf';
+        } catch (e) {
+            return false;
+        }
     }
 
     async _uploadRawToDrive(name, bytes, mime, folderId, existingId, appProps = {}) {

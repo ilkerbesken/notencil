@@ -2269,6 +2269,13 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
 
             // 5. Async Operations
             if (boardMetaToSave) {
+                // Eğer bu bir ham PDF ise ve üzerine bir şeyler yazılmışsa (objects veya sayfa eklenmişse)
+                // artık ham kaynak değildir, Drive'da sidecar (.ncil) oluşturulması gerekir.
+                const b = boardMetaToSave.find(x => x.id === boardId);
+                if (b && b.isRawSource && ((optimizedPages && optimizedPages.length > 0) || (content.objects && content.objects.length > 0))) {
+                    b.isRawSource = false;
+                    console.log(`[Dashboard] ${b.name} artık ham kaynak değil (notlar eklendi).`);
+                }
                 await this.saveDataAsync('wb_boards', boardMetaToSave);
             }
 
