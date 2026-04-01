@@ -33,7 +33,18 @@ jobs:
       - name: Build iOS App
         run: |
           cd ios/App
-          xcodebuild -project App.xcodeproj -scheme App -sdk iphoneos -configuration Debug -allowProvisioningUpdates build
+          xcodebuild -project App.xcodeproj \
+                     -scheme App \
+                     -sdk iphoneos \
+                     -configuration Debug \
+                     -allowProvisioningUpdates \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGN_STYLE=Manual \
+                     DEVELOPMENT_TEAM="" \
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
+                     build
         # Not: Gerçek bir cihazda çalıştırmak için imzalama (signing) sertifikaları gereklidir.
         # Bu aşamada sadece kodun derlenebilir olduğunu doğruluyoruz.
 
