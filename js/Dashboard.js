@@ -1489,6 +1489,12 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                     if (radio.checked) {
                         this.viewSettings.autosaveInterval = radio.value;
                         await this.saveDataAsync('wb_view_settings', this.viewSettings);
+                        
+                        // Update current pending save if we are in a board
+                        if (this.currentBoardId) {
+                            this.saveCurrentBoard();
+                        }
+                        
                         Utils.showToast(window.i18n.t('autosave_setting_updated'), 'success');
                     }
                 };
