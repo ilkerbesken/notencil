@@ -90,7 +90,28 @@ class CloudStorageManager {
             const fsm = window.fileSystemManager;
 
             // 1. ADIM: Temel Klasörleri Bul (Hızlı)
-            const appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
+            // Önce AppDataFolder'da saklanan root folder ID'sini kontrol et (Cihazlar arası tutarlılık için)
+            let appFolderId = await this._getAppFolderIdFromConfig();
+            
+            if (!appFolderId) {
+                console.log('[CloudSync] Root klasör ID\'si yapılandırmada bulunamadı, aranıyor...');
+                appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
+                if (appFolderId) {
+                    await this._saveAppFolderIdToConfig(appFolderId);
+                }
+            } else {
+                // Kayıtlı ID'nin hala geçerli olduğunu doğrula (trash kontrolü)
+                const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${appFolderId}?fields=id,trashed`, {
+                    headers: { Authorization: `Bearer ${this.gdriveToken}` }
+                });
+                const checkData = await checkRes.json();
+                if (!checkRes.ok || checkData.trashed) {
+                    console.warn('[CloudSync] Kayıtlı root klasör geçersiz veya silinmiş, yeniden oluşturuluyor...');
+                    appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
+                    await this._saveAppFolderIdToConfig(appFolderId);
+                }
+            }
+
             const settingsFolderId = await this._getOrCreateDriveFolderMinimal('.settings', appFolderId);
 
             let syncCount = 0;
@@ -543,6 +564,59 @@ class CloudStorageManager {
         }
     }
 
+    // ─── Cihazlar Arası Yapılandırma (AppDataFolder) ──────────────────
+    
+    async _getAppFolderIdFromConfig() {
+        try {
+            // AppDataFolder içindeki yapılandırma dosyasını ara
+            const q = "name='notencil-config.json' and 'appDataFolder' in parents and trashed=false";
+            const params = new URLSearchParams({ q, spaces: 'appDataFolder', fields: 'files(id)' });
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+                headers: { Authorization: `Bearer ${this.gdriveToken}` }
+            });
+            const data = await res.json();
+            const file = data.files?.[0];
+            if (!file) return null;
+
+            // İçeriği oku
+            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+                headers: { Authorization: `Bearer ${this.gdriveToken}` }
+            });
+            if (!contentRes.ok) return null;
+            const config = await contentRes.json();
+            return config.rootFolderId;
+        } catch (e) {
+            console.warn('[CloudSync] Config okunamadı:', e);
+            return null;
+        }
+    }
+
+    async _saveAppFolderIdToConfig(rootFolderId) {
+        try {
+            const config = { rootFolderId, lastUpdated: new Date().toISOString() };
+            const bytes = new TextEncoder().encode(JSON.stringify(config, null, 2));
+            
+            // AppDataFolder içinde dosya var mı?
+            const q = "name='notencil-config.json' and 'appDataFolder' in parents and trashed=false";
+            const params = new URLSearchParams({ q, spaces: 'appDataFolder', fields: 'files(id)' });
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+                headers: { Authorization: `Bearer ${this.gdriveToken}` }
+            });
+            const data = await res.json();
+            const existingId = data.files?.[0]?.id;
+
+            // appDataFolder için parents dizisi 'appDataFolder' olmalı
+            const metadata = existingId ? { name: 'notencil-config.json' } : { name: 'notencil-config.json', parents: ['appDataFolder'] };
+            
+            // Resumable upload yerine küçük dosya olduğu için multipart da olabilir ama 
+            // _uploadRawToDrive artık resumable kullanıyor, onu kullanalım.
+            await this._uploadRawToDrive('notencil-config.json', bytes, 'application/json', 'appDataFolder', existingId);
+            console.log('[CloudSync] Root ID yapılandırması Drive AppDataFolder\'a kaydedildi.');
+        } catch (e) {
+            console.warn('[CloudSync] Config kaydedilemedi:', e);
+        }
+    }
+
     // ─── Klasör Yönetimi (Yeni Robust Mantık) ──────────────────────
     
     async _getOrCreateDriveFolderMinimal(name, parentId) {
@@ -673,29 +747,54 @@ class CloudStorageManager {
     }
 
     async _uploadRawToDrive(name, bytes, mime, folderId, existingId, appProps = {}) {
-        // Multipart upload GAPI client'da biraz karmaşık olduğu için manual fetch (v3) kullanmaya devam ediyoruz
-        // Ancak token'ı GAPI'den alıyoruz
+        // Multipart upload yerine Resumable Upload kullanıyoruz (Büyük dosyalar ve iPad senkronizasyon sorunları için)
+        // Bu yöntem 5MB limitine takılmaz ve daha güvenilirdir.
         const metadata = existingId ? { name, appProperties: appProps } : { name, parents: [folderId], appProperties: appProps };
-        const url = existingId ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
         
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([bytes], { type: mime }));
-        
-        const res = await fetch(url, { 
-            method: existingId ? 'PATCH' : 'POST', 
-            headers: { Authorization: `Bearer ${this.gdriveToken}` }, 
-            body: form 
-        });
+        try {
+            // 1. ADIM: Upload session başlat
+            const sessionUrl = existingId 
+                ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=resumable` 
+                : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
+            
+            const sessionRes = await fetch(sessionUrl, {
+                method: existingId ? 'PATCH' : 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.gdriveToken}`,
+                    'Content-Type': 'application/json',
+                    'X-Upload-Content-Type': mime,
+                    'X-Upload-Content-Length': bytes.length
+                },
+                body: JSON.stringify(metadata)
+            });
 
-        if (!res.ok) {
-            const errData = await res.json();
-            console.error('[CloudSync] Upload hatası:', name, errData);
-            throw new Error(`Drive yükleme hatası (${res.status}): ${errData.error?.message || 'Bilinmeyen hata'}`);
+            if (!sessionRes.ok) {
+                const errData = await sessionRes.json();
+                console.error('[CloudSync] Session başlatma hatası:', name, errData);
+                throw new Error(`Drive session hatası (${sessionRes.status}): ${errData.error?.message || 'Bilinmeyen hata'}`);
+            }
+
+            const uploadUrl = sessionRes.headers.get('Location');
+
+            // 2. ADIM: Binary veriyi gönder
+            const uploadRes = await fetch(uploadUrl, {
+                method: 'PUT',
+                body: bytes // Base64 yok, doğrudan binary transfer
+            });
+
+            if (!uploadRes.ok) {
+                const errData = await uploadRes.json();
+                console.error('[CloudSync] Binary transfer hatası:', name, errData);
+                throw new Error(`Drive binary hatası (${uploadRes.status}): ${errData.error?.message || 'Bilinmeyen hata'}`);
+            }
+
+            const r = await uploadRes.json(); 
+            return r.id;
+
+        } catch (err) {
+            console.error('[CloudSync] Resumable upload başarısız, multipart fallback denenmiyor:', err);
+            throw err;
         }
-
-        const r = await res.json(); 
-        return r.id;
     }
 
     async _uploadBoardNcil(board, content, folders, appFolderId, existingId, targetParentId = null) {
@@ -835,7 +934,15 @@ class CloudStorageManager {
         // Serialize content before zipping (rounding coordinates, pressure, opacity, etc.)
         const serialized = this.app.ncilFileManager ? await this.app.ncilFileManager.serializeContent(c, bId) : c;
         
-        const jsonStr = JSON.stringify(serialized);
+        // Drive senkronizasyonu için PDF verisini JSON'dan çıkarıyoruz (Drive'da ayrı dosya olarak tutuluyor)
+        // Bu sayede 5MB multipart limitini aşmayız ve senkronizasyon hızlanır.
+        const driveSafeContent = Array.isArray(serialized) ? serialized : { ...serialized };
+        if (driveSafeContent.pdfBase64) {
+            delete driveSafeContent.pdfBase64;
+            console.log(`[CloudSync] PDF verisi JSON'dan temizlendi (Board: ${bId})`);
+        }
+        
+        const jsonStr = JSON.stringify(driveSafeContent);
         const compressed = window.pako.gzip(jsonStr);
         const sig = new TextEncoder().encode(APP_CONFIG.SIGNATURE || 'NOTENCIL!');
         const r = new Uint8Array(sig.length + compressed.length); 

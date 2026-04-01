@@ -19,267 +19,32 @@ class NcilFileManager {
     constructor(app) {
         this.app = app;
         this._pakoReady = false;
+        this.exporter = new NcilExporter(app);
         this._ensurePako();
     }
 
     // ─────────────────────────────────────────────
-    // Pako yükleme
-    // ─────────────────────────────────────────────
-
-    async _ensurePako() {
-        if (typeof pako !== 'undefined') { this._pakoReady = true; return; }
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js';
-            script.onload = () => { this._pakoReady = true; console.log('[NcilFileManager] pako yüklendi.'); resolve(); };
-            script.onerror = () => { console.error('[NcilFileManager] pako yüklenemedi!'); reject(new Error('pako yüklenemedi')); };
-            document.head.appendChild(script);
-        });
-    }
-
-    async _waitForPako() {
-        if (this._pakoReady) return;
-        await this._ensurePako();
-        let attempts = 0;
-        while (typeof pako === 'undefined' && attempts < 50) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
-        }
-        if (typeof pako === 'undefined') throw new Error('pako kütüphanesi yüklenemedi');
-    }
-
-    // ─────────────────────────────────────────────
-    // Kaydetme
+    // Kaydetme (NcilExporter'a yönlendirildi)
     // ─────────────────────────────────────────────
 
     async saveAsNcil() {
-        await this._waitForPako();
-
-        const dashboard = window.dashboard;
-        if (!dashboard) { Utils.showToast(window.i18n.t('dashboard_not_found'), 'error'); return; }
-
-        const boardId = dashboard.currentBoardId;
-        const board = dashboard.boards.find(b => b.id === boardId);
-        const boardName = board ? board.name : APP_CONFIG.ID;
-
-        // İçeriği hazırla — gzip ile sıkıştır
-        await this._ensurePako();
-        const finalData = await this.createNcilDataFromCurrentState();
-
-        // Dosya adı temizle
-        const safeName = boardName.replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ\s\-_]/g, '').trim() || APP_CONFIG.ID;
-
-        // File System Access API ile kaydet
-        if (window.showSaveFilePicker) {
-            try {
-                const fileHandle = await window.showSaveFilePicker({
-                    suggestedName: `${safeName}${APP_CONFIG.FILE_EXTENSION}`,
-                    types: [{ description: `${APP_CONFIG.NAME} Note (${APP_CONFIG.FILE_EXTENSION})`, accept: { [APP_CONFIG.MIME_TYPE]: [APP_CONFIG.FILE_EXTENSION] } }]
-                });
-                const writable = await fileHandle.createWritable();
-                await writable.write(finalData);
-                await writable.close();
-                console.log(`[NcilFileManager] ${APP_CONFIG.FILE_EXTENSION} file saved (signed).`);
-                this._showToast(`✅ ${window.i18n.t('file_saved')} (${APP_CONFIG.FILE_EXTENSION})`);
-                return;
-            } catch (e) {
-                if (e.name === 'AbortError') return;
-                console.warn('[NcilFileManager] showSaveFilePicker failed, using fallback:', e);
-            }
-        }
-
-        // Fallback: <a> download
-        const blob = new Blob([finalData], { type: APP_CONFIG.MIME_TYPE });
-        const link = document.createElement('a');
-        link.download = `${safeName}${APP_CONFIG.FILE_EXTENSION}`;
-        link.href = URL.createObjectURL(blob);
-        link.click();
-        URL.revokeObjectURL(link.href);
-        this._showToast(`✅ ${window.i18n.t('file_downloaded')} (${APP_CONFIG.FILE_EXTENSION})`);
+        return this.exporter.saveAsNcil();
     }
 
-    /**
-     * Mevcut uygulama durumundan .ncil formatında (imzalı + sıkıştırılmış) veri oluşturur.
-     */
     async createNcilDataFromCurrentState() {
-        await this._waitForPako();
-
-        // Mevcut sayfa durumunu diske/belleğe kaydet
-        if (this.app.pageManager) {
-            this.app.pageManager.saveCurrentPageState();
-        }
-
-        // Sayfaları serileştir
-        let pages = null;
-        if (this.app.pageManager) {
-            pages = this.app.pageManager.pages.map(page => {
-                const p = Utils.deepClone(page);
-                delete p.thumbnail;
-                p.objects = p.objects.map(obj => this._serializeObject(obj));
-                return p;
-            });
-        }
-
-        // PDF binary verisini base64 olarak ekle
-        let pdfBase64 = null;
-        const boardId = window.dashboard?.currentBoardId;
-        if (boardId) {
-            try {
-                const pdfBlob = await Utils.db.get(boardId);
-                if (pdfBlob instanceof Blob) {
-                    pdfBase64 = await this._blobToBase64(pdfBlob);
-                }
-            } catch (e) {
-                console.warn('[NcilFileManager] PDF verisi alınamadı:', e);
-            }
-        }
-
-        const content = {
-            version: '2.1',
-            format: 'ncil',
-            savedAt: new Date().toISOString(),
-            appVersion: APP_CONFIG.NAME,
-            id: boardId || window.dashboard?.currentBoardId,
-            pages: pages,
-            currentPageIndex: this.app.pageManager ? this.app.pageManager.currentPageIndex : 0,
-            objects: pages ? null : (this.app.state.objects || []).map(obj => this._serializeObject(obj)),
-            pdfBase64: pdfBase64 || undefined
-        };
-
-        const jsonStr = JSON.stringify(content);
-        const compressed = pako.gzip(jsonStr);
-
-        const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE);
-        const finalData = new Uint8Array(header.length + compressed.length);
-        finalData.set(header);
-        finalData.set(compressed, header.length);
-
-        return finalData;
+        return this.exporter.createNcilDataFromCurrentState();
     }
 
-    /**
-     * Dışarıdan gelen content objesini .ncil Blob'una dönüştürür.
-     */
     async createNcilBlob(content, boardName, boardId = null) {
-        await this._waitForPako();
-        
-        // Eğer content bir board ID'si ise (FileSystemManager'dan geliyorsa)
-        // o board'un tam içeriğini (sayfalar, objeler, pdf vb.) zaten içeriyor olmalı.
-        // Ama pdf verisi eksik olabilir, onu ekleyelim.
-        const effectiveId = boardId || content.id || (window.dashboard?.boards.find(b => b.name === boardName)?.id);
-
-        if (content && !content.pdfBase64 && effectiveId) {
-            try {
-                const pdfBlob = await Utils.db.get(effectiveId);
-                if (pdfBlob instanceof Blob) {
-                    content.pdfBase64 = await this._blobToBase64(pdfBlob);
-                    console.log('[NcilFileManager] PDF verisi export dosyasına eklendi:', effectiveId);
-                }
-            } catch (e) {
-                console.warn('[NcilFileManager] Export için PDF verisi alınamadı:', e);
-            }
-        }
-
-        // Serialize content before zipping (rounding coordinates, flattening points, etc.)
-        const serialized = this.serializeContent(content);
-
-        const jsonStr = JSON.stringify(serialized);
-        const compressed = pako.gzip(jsonStr);
-        const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE);
-        const finalData = new Uint8Array(header.length + compressed.length);
-        finalData.set(header);
-        finalData.set(compressed, header.length);
-
-        return new Blob([finalData], { type: APP_CONFIG.MIME_TYPE });
+        return this.exporter.createNcilBlob(content, boardName, boardId);
     }
 
-    /**
-     * Bir board içeriğini .ncil formatına hazırlamak için serileştirir.
-     * Basınç, opaklık, yuvarlama ve koordinat hassasiyetini ayarlar.
-     * PDF arka planı eksikse otomatik olarak ekler.
-     */
     async serializeContent(content, boardId = null) {
-        if (!content) return content;
-        
-        // Derin kopya — orijinal nesneyi değiştirme
-        const c = Utils.deepClone(content);
-
-        if (c.pages) {
-            c.pages = c.pages.map(page => {
-                if (page.objects) {
-                    page.objects = page.objects.map(obj => this._serializeObject(obj));
-                }
-                // Thumbnail runtime verisidir, dosyaya yazma
-                delete page.thumbnail;
-                return page;
-            });
-        } else if (c.objects) {
-            c.objects = c.objects.map(obj => this._serializeObject(obj));
-        }
-
-        // PDF arka planını dahil et (Eğer eksikse ve boardId varsa)
-        const effectiveId = boardId || c.id || window.dashboard?.currentBoardId;
-        if (!c.pdfBase64 && effectiveId) {
-            // Board'un gerçekten PDF olup olmadığını kontrol et (Performans için gereksiz DB okumasını önle)
-            const board = window.dashboard?.boards.find(b => b.id === effectiveId);
-            if (board && board.isPDF) {
-                try {
-                    const pdfBlob = await Utils.db.get(effectiveId);
-                    if (pdfBlob instanceof Blob) {
-                        c.pdfBase64 = await this._blobToBase64(pdfBlob);
-                        console.log('[NcilFileManager] PDF arka planı içeriğe dahil edildi:', effectiveId);
-                    }
-                } catch (e) {
-                    console.warn('[NcilFileManager] PDF arka planı alınamadı:', e);
-                }
-            }
-        }
-
-        return c;
+        return this.exporter.serializeContent(content, boardId);
     }
 
-    /**
-     * Bir template'i .ncil dosyası olarak dışa aktar
-     * @param {Object} template - TemplateManager'dan gelen template nesnesi
-     */
     async saveTemplateAsNcil(template) {
-        await this._waitForPako();
-
-        if (!template || !template.objects) {
-            Utils.showToast(window.i18n.t('template_not_found'), 'warning');
-            return;
-        }
-
-        const content = {
-            version: '2.1',
-            format: 'ncil',
-            savedAt: new Date().toISOString(),
-            appVersion: APP_CONFIG.NAME,
-            pages: [{
-                id: 'p1',
-                name: template.name || 'Template',
-                objects: template.objects.map(obj => this._serializeObject(obj)),
-                background: template.background || '#ffffff',
-                paperTexture: template.paperTexture || 'none'
-            }],
-            currentPageIndex: 0
-        };
-
-        const jsonStr = JSON.stringify(content);
-        const compressed = pako.gzip(jsonStr);
-        const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE);
-        const finalData = new Uint8Array(header.length + compressed.length);
-        finalData.set(header);
-        finalData.set(compressed, header.length);
-
-        const safeName = (template.name || 'template').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim();
-        const blob = new Blob([finalData], { type: APP_CONFIG.MIME_TYPE });
-        const link = document.createElement('a');
-        link.download = `${safeName}${APP_CONFIG.FILE_EXTENSION}`;
-        link.href = URL.createObjectURL(blob);
-        link.click();
-        URL.revokeObjectURL(link.href);
-        this._showToast(`✅ ${window.i18n.t('file_downloaded')} (${APP_CONFIG.FILE_EXTENSION})`);
+        return this.exporter.saveTemplateAsNcil(template);
     }
 
     // ─────────────────────────────────────────────
@@ -477,147 +242,33 @@ class NcilFileManager {
     }
 
     // ─────────────────────────────────────────────
-    // Serileştirme (Kayıt) Yardımcıları
+    // Yardımcı Fonksiyonlar
     // ─────────────────────────────────────────────
 
-    /**
-     * Tek bir nesneyi JSON-güvenli hale getirir.
-     * Araç tipine göre özel işlemler uygular.
-     */
-    _serializeObject(obj) {
-        if (!obj) return obj;
-
-        // Derin kopya — orijinal nesneyi değiştirme
-        const o = Object.assign({}, obj);
-
-        // ── Grup: recursive ──
-        if (o.type === 'group') {
-            o.children = (o.children || []).map(child => this._serializeObject(child));
-            return o;
-        }
-
-        // ── Kalem / Vurgulayıcı: points flat array ──
-        if ((o.type === 'pen' || o.type === 'highlighter') && Array.isArray(o.points) && !o._flat) {
-            // High precision: NO SIMPLIFICATION. Keep Chaikin points for perfect curves.
-            const flat = [];
-            for (const p of o.points) {
-                flat.push(Math.round(p.x * 100000) / 100000);
-                flat.push(Math.round(p.y * 100000) / 100000);
-                flat.push(p.pressure !== undefined ? (Math.round(p.pressure * 100000) / 100000) : 0.5);
-            }
-            o.points = flat;
-            o._flat = true;
-        }
-
-        // ── Ok / Çizgi: koordinat hassasiyeti ──
-        if (o.type === 'arrow' || o.type === 'line') {
-            if (o.start) o.start = this._roundPoint(o.start);
-            if (o.end) o.end = this._roundPoint(o.end);
-            if (o.curveControlPoint) o.curveControlPoint = this._roundPoint(o.curveControlPoint);
-        }
-
-        // ── Şekiller: koordinat hassasiyeti ──
-        if (o.x !== undefined) o.x = Math.round(o.x * 100000) / 100000;
-        if (o.y !== undefined) o.y = Math.round(o.y * 100000) / 100000;
-        if (o.width !== undefined) o.width = Math.round(o.width * 100000) / 100000;
-        if (o.height !== undefined) o.height = Math.round(o.height * 100000) / 100000;
-        if (o.rotation !== undefined) o.rotation = Math.round(o.rotation * 100) / 100;
-
-        // ── Bant (Tape): points + customMask/customImage ──
-        if (o.type === 'tape') {
-            // Points dizisi flat array'e çevir (daha küçük dosya)
-            if (Array.isArray(o.points) && !o._flat) {
-                const flat = [];
-                for (const p of o.points) {
-                    flat.push(Math.round(p.x * 100000) / 100000);
-                    flat.push(Math.round(p.y * 100000) / 100000);
-                }
-                o.points = flat;
-                o._flat = true;
-            }
-
-            // HTMLCanvasElement → base64 PNG
-            if (o.customMask && (o.customMask instanceof HTMLCanvasElement)) {
-                try {
-                    o.customMask = { _type: 'canvas_b64', data: o.customMask.toDataURL('image/png') };
-                } catch (_) { delete o.customMask; }
-            } else if (o.customMask && !(typeof o.customMask === 'object' && o.customMask._type)) {
-                // Serialize edilemeyen nesneyi sil
-                delete o.customMask;
-            }
-
-            if (o.customImage && (o.customImage instanceof HTMLImageElement || o.customImage instanceof HTMLCanvasElement)) {
-                try {
-                    if (o.customImage instanceof HTMLCanvasElement) {
-                        o.customImage = { _type: 'canvas_b64', data: o.customImage.toDataURL('image/png') };
-                    } else {
-                        // HTMLImageElement: src üzerinden canvas'a çekip base64 al
-                        const tmpCanvas = document.createElement('canvas');
-                        tmpCanvas.width = o.customImage.naturalWidth || 100;
-                        tmpCanvas.height = o.customImage.naturalHeight || 100;
-                        tmpCanvas.getContext('2d').drawImage(o.customImage, 0, 0);
-                        o.customImage = { _type: 'canvas_b64', data: tmpCanvas.toDataURL('image/png') };
-                    }
-                } catch (_) { delete o.customImage; }
-            } else if (o.customImage && !(typeof o.customImage === 'object' && o.customImage._type)) {
-                delete o.customImage;
-            }
-
-            // Pattern cache kaldır (her zaman yeniden oluşturulur)
-            // patterns objesi TapeTool instance'ında saklanır, obj'de değil — sorun yok
-        }
-
-        // ── Metin (Text): sadece gerekli alanlar ──
-        if (o.type === 'text') {
-            // htmlContent, fontSize, color, alignment, x, y, width, height zaten var
-            // _imageCache gibi runtime önbellekleri kaldır
-            delete o._imageCache;
-            delete o._cachedSvg;
-        }
-
-        // ── Tablo (Table): önbellek temizle ──
-        if (o.type === 'table') {
-            // _cellCaches runtime bilgisi — kayıt dışı
-            delete o._cellCaches;
-            // cellStyles'ın her hücresini serialize et
-            if (Array.isArray(o.cellStyles)) {
-                o.cellStyles = o.cellStyles.map(row =>
-                    (row || []).map(cell => cell || {})
-                );
-            }
-            // data 2D dizisi zaten JSON-serializable (string content HTML olabilir)
-        }
-
-        // ── Resim (Image): src base64 veya URL ──
-        // src zaten string, ImageTool cache kaldır
-        if (o.type === 'image') {
-            // _cachedImage gibi runtime nesneleri kaldır
-            delete o._cachedImage;
-        }
-
-        // ── Genel: DOM elemanlarını ve cyclic referansları temizle ──
-        delete o._cellEditor;
-        delete o._toolbar;
-
-        return o;
+    async _ensurePako() {
+        if (typeof pako !== 'undefined') { this._pakoReady = true; return; }
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js';
+            script.onload = () => { this._pakoReady = true; console.log('[NcilFileManager] pako yüklendi.'); resolve(); };
+            script.onerror = () => { console.error('[NcilFileManager] pako yüklenemedi!'); reject(new Error('pako yüklenemedi')); };
+            document.head.appendChild(script);
+        });
     }
 
-    _roundPoint(p) {
-        if (!p) return p;
-        return {
-            x: Math.round(p.x * 100000) / 100000,
-            y: Math.round(p.y * 100000) / 100000,
-            pressure: p.pressure !== undefined ? (Math.round(p.pressure * 100000) / 100000) : 0.5
-        };
+    async _waitForPako() {
+        if (this._pakoReady) return;
+        await this._ensurePako();
+        let attempts = 0;
+        while (typeof pako === 'undefined' && attempts < 50) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+        if (typeof pako === 'undefined') throw new Error('pako kütüphanesi yüklenemedi');
     }
 
-    // ─────────────────────────────────────────────
-    // Deserileştirme (Açma) Yardımcıları
-    // ─────────────────────────────────────────────
-
     /**
-     * Tek bir nesneyi çalışma zamanı formatına geri çevirir.
-     * Async çünkü canvas/image yükleme gerekebilir.
+     * base64 PNG → HTMLImageElement (Promise)
      */
     async _deserializeObject(obj) {
         if (!obj) return obj;
