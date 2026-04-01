@@ -158,7 +158,8 @@ class CloudStorageManager {
     async _pullManifest(settingsFolderId) {
         try {
             const q = `name='${APP_CONFIG.MANIFEST_FILE}' and '${settingsFolderId}' in parents and trashed=false`;
-            const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
+            // Cache-busting parameter t=Date.now() to ensure we get the latest manifest from Drive
+            const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1', t: Date.now() });
             const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
@@ -166,7 +167,8 @@ class CloudStorageManager {
             const file = data.files?.[0];
             if (!file) return null;
 
-            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+            // Media fetch also with cache-busting
+            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&t=${Date.now()}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
             if (!contentRes.ok) return null;
@@ -465,7 +467,8 @@ class CloudStorageManager {
         if (!driveId) return null;
 
         try {
-            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media`, {
+            // Media fetch with cache-busting
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media&t=${Date.now()}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
             

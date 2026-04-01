@@ -141,8 +141,13 @@ class NcilExporter {
                 const pdfBlob = await Utils.db.get(boardId);
                 if (pdfBlob instanceof Blob) {
                     optimized.pdfBase64 = await this._blobToBase64(pdfBlob);
+                    console.log(`[NcilExporter] PDF verisi DB'den başarıyla çekildi ve içeriğe eklendi (Size: ${optimized.pdfBase64.length})`);
+                } else {
+                    console.warn(`[NcilExporter] PDF verisi DB'de bulunamadı veya Blob değil: ${boardId}`);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(`[NcilExporter] PDF çekme hatası:`, e);
+            }
         }
 
         return optimized;

@@ -99,6 +99,15 @@ input:checked+.slider:before {
     transform: translateX(14px);
 }
 
+.spinning {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 /* Rounded sliders */
 .slider.round {
     border-radius: 20px;
