@@ -345,20 +345,19 @@ class CloudStorageManager {
             // PDF boards: Always ensure PDF background is on Drive, even if metadata seems synced
             // because the background PDF might have been missed in previous versions.
             // OR if it's explicitly a PDF but has no Drive ID for the PDF part.
-            const needsPush = !meta.googleDriveFileId || (meta.lastModifiedLocally > (meta.lastSyncedTime || 0));
+            const needsPush = !meta.googleDriveFileId || (board.lastModified > (meta.lastSyncedTime || 0) + 2000);
             
             if (board.isPDF || needsPush) {
                 console.log(`[CloudSync] İşleniyor: ${board.name}...`);
                 let content = await fsm.getItem(`wb_content_${board.id}`, null);
                 
-                // Eğer içerik henüz yoksa (örneğin yerel klasörden yeni içe aktarılmışsa)
-                // skeleton bir içerik oluşturuyoruz.
-                if (!content) {
-                    content = { version: "2.1", pages: [], pdfBase64: null, objects: [] };
-                    console.log(`[CloudSync] Not için skeleton içerik oluşturuldu: ${board.name}`);
+                // FIX: Eğer içerik yoksa ve PDF board değilse push etme (skeleton engelleme)
+                if (!content && !board.isPDF) {
+                    console.log(`[CloudSync] İçerik yok, atlanıyor: ${board.name}`);
+                    continue;
                 }
 
-                if (content) {
+                if (content || board.isPDF) {
                     const targetParentId = board.folderId ? driveFolderMapping[board.folderId] : appFolderId;
                     try {
                         let driveFileId;
@@ -414,7 +413,7 @@ class CloudStorageManager {
                                 const foundNcilId = await this._findFileByBoardId(board.id, targetParentId);
                                 if (foundNcilId) driveFileId = foundNcilId;
                             }
-                        } else {
+                        } else if (content) {
                             // Normal board veya üzerine not alınmış PDF (.ncil sidecar)
                             let targetIdForUpload = meta.googleDriveFileId;
                             
@@ -426,6 +425,10 @@ class CloudStorageManager {
                             }
 
                             driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, targetIdForUpload, targetParentId);
+                        } else if (board.isPDF) {
+                            // PDF board ama henüz içerik yok, NCIL yüklemeye gerek yok
+                            // PDF arka planı yukarıdaki blokta zaten yüklendi/güncellendi.
+                            driveFileId = meta.googleDriveFileId || await this._findFileByBoardId(board.id, targetParentId, true);
                         }
 
                         if (driveFileId) {
