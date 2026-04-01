@@ -413,6 +413,15 @@ class FileSystemManager {
         console.log(`[FileSystemManager] ${allData.length} öğe yerel klasöre senkronize edildi.`);
     }
 
+    /**
+     * Sync metadata placeholder.
+     * To be implemented for cloud storage (Google Drive, etc.)
+     */
+    async updateSyncMetadata(boardId) {
+        // No-op placeholder to prevent crashes
+        return true;
+    }
+
     // ─────────────────────────────────────────────
     // CRUD Operasyonları
     // ─────────────────────────────────────────────
