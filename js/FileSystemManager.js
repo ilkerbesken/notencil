@@ -553,35 +553,27 @@ class FileSystemManager {
             targetDir = await targetDir.getDirectoryHandle(folderName, { create: true });
         }
 
-        // İçeriği hazırla — NcilFileManager gibi gzip ile sıkıştır
-        await this._ensurePako();
-
-        // Serialize content before zipping (rounding coordinates, pressure, opacity, etc.)
-        const serialized = (window.app && window.app.ncilFileManager) 
-            ? await window.app.ncilFileManager.serializeContent(value, boardId) 
-            : value;
-
-        const content = JSON.stringify({
-            version: serialized.version || '2.1',
-            format: 'ncil',
-            savedAt: new Date().toISOString(),
-            pages: serialized.pages || null,
-            objects: serialized.objects || null,
-            pdfBase64: serialized.pdfBase64 || null
-        });
-
+        // İçeriği hazırla — NcilFileManager (Exporter) kullanılarak .ncil verisi oluşturulur
+        const ncilFM = (window.app && window.app.ncilFileManager) ? window.app.ncilFileManager : null;
         let binaryData;
-        if (typeof pako !== 'undefined') {
-            const compressed = pako.gzip(content);
-            // Write custom header - for easy identification
-            const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE || 'notencil!');
-            binaryData = new Uint8Array(header.length + compressed.length);
-            binaryData.set(header);
-            binaryData.set(compressed, header.length);
-            console.log(`[FileSystemManager] ${fileName} sıkıştırılarak kaydedildi. (${content.length} -> ${binaryData.length} byte)`);
+
+        if (ncilFM) {
+            const blob = await ncilFM.createNcilBlob(value, fileName, boardId);
+            const arrayBuffer = await blob.arrayBuffer();
+            binaryData = new Uint8Array(arrayBuffer);
         } else {
-            console.warn('[FileSystemManager] pako yüklenemedi, dosya RAW JSON olarak kaydediliyor.');
-            binaryData = new TextEncoder().encode(content);
+            // Fallback (eğer ncilFM yoksa - pek olası değil ama güvenli)
+            await this._ensurePako();
+            const content = JSON.stringify(value);
+            if (typeof pako !== 'undefined') {
+                const compressed = pako.gzip(content);
+                const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE || 'notencil!');
+                binaryData = new Uint8Array(header.length + compressed.length);
+                binaryData.set(header);
+                binaryData.set(compressed, header.length);
+            } else {
+                binaryData = new TextEncoder().encode(content);
+            }
         }
 
         const fileHandle = await targetDir.getFileHandle(fileName, { create: true });

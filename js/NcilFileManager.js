@@ -36,7 +36,35 @@ class NcilFileManager {
     }
 
     async createNcilBlob(content, boardName, boardId = null) {
-        return this.exporter.createNcilBlob(content, boardName, boardId);
+        // Use NcilExporter to prepare the optimized content
+        const serialized = await this.exporter.serializeContent(content, boardId);
+        
+        // Add metadata like version and savedAt
+        const finalContent = {
+            version: serialized.version || '2.1',
+            format: 'ncil',
+            savedAt: new Date().toISOString(),
+            appVersion: APP_CONFIG.NAME,
+            id: boardId || serialized.id,
+            pages: serialized.pages || null,
+            currentPageIndex: serialized.currentPageIndex !== undefined ? serialized.currentPageIndex : 0,
+            pdfBase64: serialized.pdfBase64 || undefined
+        };
+
+        const jsonStr = JSON.stringify(finalContent);
+        
+        await this._waitForPako();
+        if (typeof pako === 'undefined') {
+            return new Blob([jsonStr], { type: 'application/json' });
+        }
+
+        const compressed = pako.gzip(jsonStr);
+        const header = new TextEncoder().encode(APP_CONFIG.SIGNATURE || 'notencil!');
+        const finalData = new Uint8Array(header.length + compressed.length);
+        finalData.set(header);
+        finalData.set(compressed, header.length);
+        
+        return new Blob([finalData], { type: APP_CONFIG.MIME_TYPE });
     }
 
     async serializeContent(content, boardId = null) {
