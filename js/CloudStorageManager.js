@@ -580,19 +580,27 @@ class CloudStorageManager {
     // ─── Cihazlar Arası Yapılandırma (AppDataFolder) ──────────────────
     
     async _getAppFolderIdFromConfig() {
+        if (this._appDataDisabled) return null;
         try {
             // AppDataFolder içindeki yapılandırma dosyasını ara
             const q = "name='notencil-config.json' and 'appDataFolder' in parents and trashed=false";
-            const params = new URLSearchParams({ q, spaces: 'appDataFolder', fields: 'files(id)' });
+            const params = new URLSearchParams({ q, spaces: 'appDataFolder', fields: 'files(id)', t: Date.now() });
             const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
+            
+            if (res.status === 403) {
+                console.warn('[CloudSync] AppDataFolder erişim izni yok, bu özellik devre dışı bırakıldı.');
+                this._appDataDisabled = true;
+                return null;
+            }
+
             const data = await res.json();
             const file = data.files?.[0];
             if (!file) return null;
 
             // İçeriği oku
-            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+            const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&t=${Date.now()}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
             if (!contentRes.ok) return null;
@@ -605,6 +613,7 @@ class CloudStorageManager {
     }
 
     async _saveAppFolderIdToConfig(rootFolderId) {
+        if (this._appDataDisabled) return;
         try {
             const config = { rootFolderId, lastUpdated: new Date().toISOString() };
             const bytes = new TextEncoder().encode(JSON.stringify(config, null, 2));
@@ -615,14 +624,18 @@ class CloudStorageManager {
             const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
+            
+            if (res.status === 403) {
+                this._appDataDisabled = true;
+                return;
+            }
+
             const data = await res.json();
             const existingId = data.files?.[0]?.id;
 
             // appDataFolder için parents dizisi 'appDataFolder' olmalı
             const metadata = existingId ? { name: 'notencil-config.json' } : { name: 'notencil-config.json', parents: ['appDataFolder'] };
             
-            // Resumable upload yerine küçük dosya olduğu için multipart da olabilir ama 
-            // _uploadRawToDrive artık resumable kullanıyor, onu kullanalım.
             await this._uploadRawToDrive('notencil-config.json', bytes, 'application/json', 'appDataFolder', existingId);
             console.log('[CloudSync] Root ID yapılandırması Drive AppDataFolder\'a kaydedildi.');
         } catch (e) {
@@ -632,6 +645,25 @@ class CloudStorageManager {
 
     // ─── Klasör Yönetimi (Yeni Robust Mantık) ──────────────────────
     
+    async _getDriveTargetFolderRobust(folderId, folders, appFolderId) {
+        const path = []; let curr = folderId;
+        const visited = new Set();
+        while (curr) { 
+            if (visited.has(curr)) break; // Sonsuz döngü koruması
+            visited.add(curr);
+            const f = folders.find(x => x.id === curr); 
+            if (!f) break; 
+            path.unshift(f); 
+            curr = f.parentId; 
+        }
+        
+        let lastId = appFolderId;
+        for (const f of path) {
+            lastId = await this._getOrCreateDriveFolderMinimal(f.name, lastId);
+        }
+        return lastId;
+    }
+
     async _getOrCreateDriveFolderMinimal(name, parentId) {
         const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentId ? ` and '${parentId}' in parents` : ''}`;
         const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
@@ -800,15 +832,12 @@ class CloudStorageManager {
             const uploadUrl = sessionRes.headers.get('Location');
 
             // 2. ADIM: Binary veriyi gönder
-            // Google Resumable Upload için PUT isteğinde Content-Length ve Content-Type zorunludur.
-            // Blob kullanımı tarayıcı uyumluluğu ve veri bütünlüğü için daha güvenlidir.
+            // Google Resumable Upload için PUT isteğinde Content-Type zorunludur.
+            // Content-Length başlığını manuel eklemek bazı tarayıcılarda (Forbidden Header) hataya/takılmaya yol açabilir.
+            // Blob kullanıldığında fetch bunu otomatik ve doğru bir şekilde yönetir.
             const blob = new Blob([bytes], { type: mime });
             const uploadRes = await fetch(uploadUrl, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': mime,
-                    'Content-Length': blob.size.toString()
-                },
                 body: blob // Base64 yok, doğrudan binary transfer
             });
 
