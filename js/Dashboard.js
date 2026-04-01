@@ -2238,7 +2238,8 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             const serializeObj = (obj) => {
                 if (!obj) return null;
                 let o;
-                if (ncilFM) {
+                // FIX: ncilFileManager ve _serializeObject kontrolünü sıkılaştır
+                if (ncilFM && typeof ncilFM._serializeObject === 'function') {
                     o = ncilFM._serializeObject(obj);
                 } else {
                     o = Object.assign({}, obj);
