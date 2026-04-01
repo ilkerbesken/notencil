@@ -2237,11 +2237,22 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             const ncilFM = this.app.ncilFileManager;
             const serializeObj = (obj) => {
                 if (!obj) return null;
-                let o;
-                // FIX: ncilFileManager ve _serializeObject kontrolünü sıkılaştır
-                if (ncilFM && typeof ncilFM._serializeObject === 'function') {
-                    o = ncilFM._serializeObject(obj);
-                } else {
+                let o = null;
+                
+                // FIX: NcilExporter'dan serialize metodunu çekmeye çalış (v0.8.2 hatası çözümü)
+                try {
+                    const exporter = ncilFM ? ncilFM.exporter : null;
+                    if (exporter && typeof exporter._serializeObject === 'function') {
+                        o = exporter._serializeObject(obj);
+                    } else if (ncilFM && typeof ncilFM._serializeObject === 'function') {
+                        o = ncilFM._serializeObject(obj);
+                    }
+                } catch (e) {
+                    console.warn('[Dashboard] External serializer error:', e);
+                }
+
+                // Fallback: Manuel serialize (Eğer yukarıdaki metodlar yoksa veya hata verirse)
+                if (!o) {
                     o = Object.assign({}, obj);
                     if (o.x !== undefined) o.x = Math.round(o.x * 100000) / 100000;
                     if (o.y !== undefined) o.y = Math.round(o.y * 100000) / 100000;
@@ -2259,6 +2270,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                         o._flat = true;
                     }
                 }
+
                 for (const key in o) {
                     const val = o[key];
                     if (val === undefined || typeof val === 'function' || val instanceof Node) {
