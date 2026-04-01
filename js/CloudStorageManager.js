@@ -221,15 +221,33 @@ class CloudStorageManager {
                 const content = await this._downloadBoardById(rb.id, rb.googleDriveFileId || meta?.googleDriveFileId);
                 if (content) {
                     if (content._isRawPDF) {
-                        // Ham PDF ise Blob'u IndexedDB'ye kaydet
-                        await Utils.db.save(rb.id, content.blob);
-                        // Minimal bir board içeriği oluştur
-                        const minimal = { version: "2.1", pages: [], pdfBase64: null, objects: [] };
-                        await fsm.saveItem(`wb_content_${rb.id}`, minimal, true, true);
-                        rb.isPDF = true;
-                        rb.alwaysSaveAsPDF = true;
+                        // Eğer indirilen dosya ham bir PDF ise, yereldeki çizimleri ezmemek için kontrol et
+                        const localContent = await fsm.getItem(`wb_content_${rb.id}`, null);
+                        if (!localContent || !localContent.pages || localContent.pages.length === 0) {
+                            // Sadece yerel içerik yoksa veya boşsa minimal içerik oluştur
+                            await Utils.db.save(rb.id, content.blob);
+                            const minimal = { version: "2.1", pages: [], pdfBase64: null, objects: [] };
+                            await fsm.saveItem(`wb_content_${rb.id}`, minimal, true, true);
+                            rb.isPDF = true;
+                            rb.alwaysSaveAsPDF = true;
+                        }
                     } else {
+                        // .ncil dosyası indirildi (içinde PDF de var)
                         await fsm.saveItem(`wb_content_${rb.id}`, content, true, true);
+                        
+                        // Eğer içerikte gömülü PDF varsa onu ayıklayıp DB'ye kaydet (Açılışta hızlı yükleme için)
+                        if (content.pdfBase64 && this.app.ncilFileManager) {
+                            try {
+                                const pdfBlob = await this.app.ncilFileManager._base64ToBlob(content.pdfBase64, 'application/pdf');
+                                if (pdfBlob) {
+                                    await Utils.db.save(rb.id, pdfBlob);
+                                    rb.isPDF = true;
+                                    console.log('[CloudSync] Gömülü PDF başarıyla ayıklandı ve DB\'ye kaydedildi:', rb.id);
+                                }
+                            } catch (e) {
+                                console.error('[CloudSync] PDF ayıklama hatası:', e);
+                            }
+                        }
                         
                         // Eğer bu bir PDF board ise, Drive'dan PDF'i de çek (Çevrimdışı erişim için)
                         if (rb.isPDF) {
@@ -387,35 +405,25 @@ class CloudStorageManager {
 
                         if (board.isRawSource && board.isPDF && !needsPush) {
                             // Eğer sadece ham PDF ise ve içerik değişikliği yoksa, mevcut ID'yi koru
+                            // ÖNEMLİ: Eğer meta'da bir NCIL ID'si varsa onu tercih etmeliyiz
                             driveFileId = meta.googleDriveFileId;
-                            // Ama Drive'da dosya var mı emin olalım
-                            if (!driveFileId) {
-                                const q = `name='${board.name}.pdf' and '${targetParentId}' in parents and trashed=false`;
-                                const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
-                                const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-                                    headers: { Authorization: `Bearer ${this.gdriveToken}` }
-                                });
-                                const data = await res.json();
-                                driveFileId = data.files?.[0]?.id;
+                            
+                            // Eğer meta ID'si bir PDF'e işaret ediyorsa, Drive'da bir NCIL var mı diye tekrar kontrol et
+                            const isActualNcil = driveFileId ? await this._checkIfFileIsNcil(driveFileId) : false;
+                            if (!isActualNcil) {
+                                const foundNcilId = await this._findFileByBoardId(board.id, targetParentId);
+                                if (foundNcilId) driveFileId = foundNcilId;
                             }
                         } else {
                             // Normal board veya üzerine not alınmış PDF (.ncil sidecar)
                             let targetIdForUpload = meta.googleDriveFileId;
                             
-                            // Eğer Drive ID'si yoksa, aynı boardId ile Drive'da dosya var mı kontrol et (Mükerrerliği önle)
-                            if (!targetIdForUpload) {
+                            // Eğer Drive ID'si yoksa veya bir PDF'e işaret ediyorsa, gerçek NCIL'i bulmaya çalış
+                            const isKnownNcil = targetIdForUpload ? await this._checkIfFileIsNcil(targetIdForUpload) : false;
+                            if (!isKnownNcil) {
                                 targetIdForUpload = await this._findFileByBoardId(board.id, targetParentId);
                             }
 
-                            // Eğer meta ID'si bir PDF'e işaret ediyorsa ama biz NCIL yüklemek istiyorsak, 
-                            // ID'yi null yapıp yeni dosya oluşturmalıyız (orijinal PDF'i ezmemek için)
-                            if (board.isPDF && targetIdForUpload) {
-                                const isActualNcil = await this._checkIfFileIsNcil(targetIdForUpload);
-                                if (!isActualNcil) {
-                                    targetIdForUpload = null;
-                                    console.log(`[CloudSync] Sidecar .ncil oluşturuluyor: ${board.name}`);
-                                }
-                            }
                             driveFileId = await this._uploadBoardNcil(board, content, folders, appFolderId, targetIdForUpload, targetParentId);
                         }
 
@@ -451,13 +459,19 @@ class CloudStorageManager {
 
     async _downloadBoardById(boardId, driveId) {
         if (!driveId) {
-            const q = `trashed=false and appProperties has { key='boardId' and value='${boardId}' }`;
-            const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
+            // ÖNCE .ncil veya çizim içeren dosyayı ara (isRaw olmayan)
+            const q = `appProperties has { key='boardId' and value='${boardId}' } and trashed=false`;
+            const params = new URLSearchParams({ q, fields: 'files(id, name, appProperties)', pageSize: '10' });
             const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
             const data = await res.json();
-            driveId = data.files?.[0]?.id;
+            
+            if (data.files && data.files.length > 0) {
+                // isRaw=true olmayan (yani çizim dosyası olan) ilk dosyayı seç
+                const ncilFile = data.files.find(f => f.appProperties?.isRaw !== 'true');
+                driveId = ncilFile ? ncilFile.id : data.files[0].id;
+            }
         }
 
         if (!driveId) return null;
@@ -466,6 +480,12 @@ class CloudStorageManager {
             const res = await fetch(`https://www.googleapis.com/drive/v3/files/${driveId}?alt=media`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
             });
+            
+            if (!res.ok) {
+                console.error('[CloudSync] Dosya içeriği indirilemedi:', driveId, res.status);
+                return null;
+            }
+
             const arrayBuffer = await res.arrayBuffer();
             return await this._inflateNcilData(arrayBuffer);
         } catch (e) {
@@ -934,15 +954,10 @@ class CloudStorageManager {
         // Serialize content before zipping (rounding coordinates, pressure, opacity, etc.)
         const serialized = this.app.ncilFileManager ? await this.app.ncilFileManager.serializeContent(c, bId) : c;
         
-        // Drive senkronizasyonu için PDF verisini JSON'dan çıkarıyoruz (Drive'da ayrı dosya olarak tutuluyor)
-        // Bu sayede 5MB multipart limitini aşmayız ve senkronizasyon hızlanır.
-        const driveSafeContent = Array.isArray(serialized) ? serialized : { ...serialized };
-        if (driveSafeContent.pdfBase64) {
-            delete driveSafeContent.pdfBase64;
-            console.log(`[CloudSync] PDF verisi JSON'dan temizlendi (Board: ${bId})`);
-        }
+        // KULLANICI İSTEĞİ: PDF verisi .ncil dosyasının içinde kalmalı (Portabilite için)
+        // Bu dosya boyutunu büyütebilir ancak Resumable Upload ile güvenli bir şekilde yüklenebilir.
         
-        const jsonStr = JSON.stringify(driveSafeContent);
+        const jsonStr = JSON.stringify(serialized);
         const compressed = window.pako.gzip(jsonStr);
         const sig = new TextEncoder().encode(APP_CONFIG.SIGNATURE || 'NOTENCIL!');
         const r = new Uint8Array(sig.length + compressed.length); 
