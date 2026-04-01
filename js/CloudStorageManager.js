@@ -359,13 +359,20 @@ class CloudStorageManager {
                 console.log(`[CloudSync] İşleniyor: ${board.name}...`);
                 let content = await fsm.getItem(`wb_content_${board.id}`, null);
                 
-                // FIX: Eğer içerik yoksa ve PDF board değilse push etme (skeleton engelleme)
-                if (!content && !board.isPDF) {
-                    console.log(`[CloudSync] İçerik yok, atlanıyor: ${board.name}`);
-                    continue;
+                // FIX: Skeleton gönderme, sadece PDF arka planını yükle
+                let pdfOnlyUpload = false;
+                if (!content) {
+                    if (board.isPDF) {
+                        // Sadece ham PDF'i yükle, boş .ncil gönderme
+                        console.log(`[CloudSync] İçerik henüz yok, sadece PDF arka planı kontrol ediliyor: ${board.name}`);
+                        pdfOnlyUpload = true;
+                    } else {
+                        console.log(`[CloudSync] İçerik henüz yok, atlanıyor: ${board.name}`);
+                        continue;
+                    }
                 }
 
-                if (content || board.isPDF) {
+                if (content || pdfOnlyUpload) {
                     const targetParentId = board.folderId ? driveFolderMapping[board.folderId] : appFolderId;
                     try {
                         let driveFileId;
@@ -981,17 +988,23 @@ class CloudStorageManager {
                 
                 if (!isPDFFilename && !isNcilFilename) continue;
                 
-                // Dashboard.js "b_" ön eki beklediği için eğer yoksa ekliyoruz
-                let bId = f.appProperties?.boardId || f.id;
+                // CANONICAL ID: Her cihazda tutarlılık için mutlaka appProperties.boardId kullanılmalı.
+                const boardId = f.appProperties?.boardId;
+                
+                if (!boardId) {
+                    console.warn(`[CloudSync] boardId eksik, atlanıyor: ${f.name} (Drive ID: ${f.id})`);
+                    continue;
+                }
+
+                // Dashboard.js "b_" ön eki beklediği için eğer yoksa ekliyoruz (Normalde b_ ile başlamalı)
+                let bId = boardId;
+                if (!bId.startsWith('b_')) bId = 'b_' + bId;
                 
                 // Ham kaynak tespiti:
                 // 1. appProperties.isRaw === 'true' (Yeni versiyon)
-                // 2. appProperties.boardId yoksa (Eski versiyon veya manuel yükleme)
-                const isRawSource = f.appProperties?.isRaw === 'true' || !f.appProperties?.boardId;
-                
-                if (!bId.startsWith('b_')) bId = 'b_' + bId;
+                const isRawSource = f.appProperties?.isRaw === 'true';
 
-                console.log(`[CloudSync] Discovery: Dosya bulundu -> ${f.name} (id: ${bId})`);
+                console.log(`[CloudSync] Discovery: Dosya bulundu -> ${f.name} (boardId: ${bId})`);
                 
                 boards.push({
                     id: bId,

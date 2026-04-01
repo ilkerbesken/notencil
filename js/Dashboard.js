@@ -68,11 +68,11 @@ class Dashboard {
         ];
 
         this.initialized = false;
-        this.initAsync();
+        this.initAsync(true);
         this.setupAutosaveFlush();
     }
 
-    async initAsync() {
+    async initAsync(isInitial = false) {
         // Initialize FileSystemManager first
         await window.fileSystemManager.init();
 
@@ -92,7 +92,8 @@ class Dashboard {
         this.setupSettingsModal();
 
         // ─── Cloud Sync Logic ─────────────────────────────────────
-        if (localStorage.getItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`)) {
+        // Sadece İLK açılışta veya manuel refresh durumlarında sync'i tetikle
+        if (isInitial && localStorage.getItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`)) {
             setTimeout(async () => {
                 const cloud = new CloudStorageManager(this.app);
 
@@ -103,7 +104,7 @@ class Dashboard {
                     if (res && res.success && (res.syncCount > 0 || res.delta)) {
                         // Refresh UI with new data only if something actually changed
                         console.log(`[Dashboard] Sync successful, ${res.syncCount} items downloaded. Reloading UI...`);
-                        await this.initAsync();
+                        await this.initAsync(false); // UI'yı yenile ama sync döngüsüne girme
                         return;
                     } else if (res && res.success) {
                         console.log('[Dashboard] Restore completed but no new files were found.');
@@ -2234,17 +2235,26 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             }
 
             // 3. Serializer definition
+            // 3. Serializer definition
             const ncilFM = this.app.ncilFileManager;
+            
+            // Fix 2: Guard - metod var mı kontrol et (Dışarıda yapıp flag olarak kullanabiliriz)
+            const canUseNcilFM = ncilFM && typeof ncilFM._serializeObject === 'function';
+            const canUseExporter = ncilFM && ncilFM.exporter && typeof ncilFM.exporter._serializeObject === 'function';
+            
+            if (!canUseNcilFM && !canUseExporter && ncilFM) {
+                console.warn('[Dashboard] ncilFileManager._serializeObject bulunamadı, fallback kullanılıyor');
+            }
+
             const serializeObj = (obj) => {
                 if (!obj) return null;
                 let o = null;
                 
-                // FIX: NcilExporter'dan serialize metodunu çekmeye çalış (v0.8.2 hatası çözümü)
+                // FIX: NcilExporter'dan veya NcilFileManager'dan serialize metodunu çekmeye çalış
                 try {
-                    const exporter = ncilFM ? ncilFM.exporter : null;
-                    if (exporter && typeof exporter._serializeObject === 'function') {
-                        o = exporter._serializeObject(obj);
-                    } else if (ncilFM && typeof ncilFM._serializeObject === 'function') {
+                    if (canUseExporter) {
+                        o = ncilFM.exporter._serializeObject(obj);
+                    } else if (canUseNcilFM) {
                         o = ncilFM._serializeObject(obj);
                     }
                 } catch (e) {
