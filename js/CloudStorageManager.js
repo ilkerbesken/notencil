@@ -215,8 +215,16 @@ class CloudStorageManager {
             if (!lb) {
                 if (!deletedIds.includes(rb.id) && (!meta?.googleDriveFileId || isDiscoveryMode)) needsPull = true;
             } 
-            else if (rb.lastModified > (lb.lastModified || 0)) {
-                needsPull = true;
+            else {
+                // Yerelde board var, içeriği kontrol et
+                const localContent = await fsm.getItem(`wb_content_${rb.id}`, null);
+                if (!localContent && !rb.isRawSource) {
+                    // İçerik yok ama Drive'da NCIL var -> Mutlaka indir (Broken state recovery)
+                    console.log(`[CloudSync] Yerel içerik eksik, indirme tetiklendi: ${rb.name}`);
+                    needsPull = true;
+                } else if (rb.lastModified > (lb.lastModified || 0)) {
+                    needsPull = true;
+                }
             }
 
             // LINKING: Eğer yerelde board varsa ama Drive ID'si eşleşmemişse, eşleştir
