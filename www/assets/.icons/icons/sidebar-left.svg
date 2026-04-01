@@ -1,0 +1,16 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="sidebar-left">
+<g id="Frame" clip-path="url(#clip0_2357_728)">
+<path id="Vector" d="M7.74995 3.94995V21.05M8.50995 3.94995H16.49C18.0861 3.94995 18.8841 3.94995 19.4939 4.26058C20.0301 4.53382 20.4661 4.96981 20.7393 5.50608C21.05 6.11572 21.05 6.9138 21.05 8.50995V16.49C21.05 18.0861 21.05 18.8841 20.7393 19.4939C20.4661 20.0301 20.0301 20.4661 19.4939 20.7393C18.8841 21.05 18.0861 21.05 16.49 21.05H8.50995C6.9138 21.05 6.11572 21.05 5.50608 20.7393C4.96981 20.4661 4.53382 20.0301 4.26058 19.4939C3.94995 18.8841 3.94995 18.0861 3.94995 16.49V8.50995C3.94995 6.9138 3.94995 6.11572 4.26058 5.50608C4.53382 4.96981 4.96981 4.53382 5.50608 4.26058C6.11572 3.94995 6.9138 3.94995 8.50995 3.94995Z" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<g id="Group 9">
+<path id="Vector 9" d="M13.45 10.6001L11.55 12.5001L13.45 14.4001" stroke="black" stroke-width="2" stroke-linecap="round"/>
+<path id="Vector 10" d="M11.55 12.5H18.2" stroke="black" stroke-width="2" stroke-linecap="round"/>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_2357_728">
+<rect width="19" height="19" fill="white" transform="translate(3 3)"/>
+</clipPath>
+</defs>
+</svg>
