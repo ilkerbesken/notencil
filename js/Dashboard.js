@@ -4010,14 +4010,16 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
         if (btnManualSync) {
             btnManualSync.onclick = async () => {
                 const cloud = getCloud();
-                if (!cloud.gdriveToken) {
-                    await cloud.signInGoogle();
-                }
-                
-                btnManualSync.classList.add('spinning');
-                Utils.showToast(window.i18n.t('syncing') || 'Senkronize ediliyor...', 'info');
                 
                 try {
+                    if (!cloud.gdriveToken) {
+                        Utils.showToast('Google Drive girişi yapılıyor...', 'info');
+                        await cloud.signInGoogle();
+                    }
+                    
+                    btnManualSync.classList.add('spinning');
+                    Utils.showToast(window.i18n.t('syncing') || 'Senkronize ediliyor...', 'info');
+                    
                     const res = await cloud.syncWithGoogleDrive();
                     if (res.success) {
                         Utils.showToast(res.message, 'success');
@@ -4028,6 +4030,7 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                         Utils.showToast(res.message, 'error');
                     }
                 } catch (err) {
+                    console.error('[Dashboard] Sync Hatası:', err);
                     Utils.showToast('Senkronizasyon hatası: ' + err.message, 'error');
                 } finally {
                     btnManualSync.classList.remove('spinning');

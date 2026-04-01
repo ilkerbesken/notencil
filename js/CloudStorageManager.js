@@ -16,8 +16,8 @@ class CloudStorageManager {
     constructor(app) {
         this.app = app;
         this.GOOGLE_CLIENT_ID = '915367935470-foe1s3qi94pstohb7p2svpbeu2v3oe66.apps.googleusercontent.com';
-        // Cihazlar arası yapılandırma için appdata kapsamı eklendi
-        this.GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.appdata';
+        // AppData kapsamı geçici olarak kaldırıldı (Hata analizi için)
+        this.GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive';
         this.DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         
         this.gisLoaded = false;
@@ -54,20 +54,36 @@ class CloudStorageManager {
     }
 
     async signInGoogle() {
+        console.log('[CloudSync] Google Girişi başlatılıyor...');
         await this.init();
         return new Promise((resolve, reject) => {
-            // eslint-disable-next-line no-undef
-            const client = google.accounts.oauth2.initTokenClient({
-                client_id: this.GOOGLE_CLIENT_ID,
-                scope: this.GOOGLE_SCOPES,
-                callback: (r) => {
-                    if (r.error) return reject(new Error(r.error));
-                    this.gdriveToken = r.access_token;
-                    localStorage.setItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`, r.access_token);
-                    resolve(r.access_token);
-                },
-            });
-            client.requestAccessToken();
+            const timeout = setTimeout(() => {
+                reject(new Error('Google Girişi zaman aşımına uğradı. Lütfen popup pencerelerini kontrol edin.'));
+            }, 60000); // 1 dakika
+
+            try {
+                // eslint-disable-next-line no-undef
+                const client = google.accounts.oauth2.initTokenClient({
+                    client_id: this.GOOGLE_CLIENT_ID,
+                    scope: this.GOOGLE_SCOPES,
+                    callback: (r) => {
+                        clearTimeout(timeout);
+                        if (r.error) {
+                            console.error('[CloudSync] Google Giriş Hatası:', r.error);
+                            return reject(new Error(r.error));
+                        }
+                        console.log('[CloudSync] Google Girişi başarılı.');
+                        this.gdriveToken = r.access_token;
+                        localStorage.setItem(`${APP_CONFIG.STORAGE_PREFIX}gdrive_token`, r.access_token);
+                        resolve(r.access_token);
+                    },
+                });
+                client.requestAccessToken();
+            } catch (err) {
+                clearTimeout(timeout);
+                console.error('[CloudSync] Client başlatma hatası:', err);
+                reject(err);
+            }
         });
     }
 
@@ -80,6 +96,7 @@ class CloudStorageManager {
      * Artık tam tarama yapmaz, sadece değişiklikleri ve kuyruğu işler.
      */
     async syncWithGoogleDrive(targetId = null) {
+        console.log('[CloudSync] Senkronizasyon başlatılıyor...', { targetId });
         if (this.isSyncing && !targetId) return { success: false, message: 'Senkronizasyon zaten sürüyor.' };
         if (targetId && this._activeSyncs?.has(targetId)) return { success: false, message: 'Öğe zaten senkronize ediliyor.' };
         
@@ -88,40 +105,29 @@ class CloudStorageManager {
 
         try {
             await this._ensureToken();
+            console.log('[CloudSync] Token doğrulandı.');
             const fsm = window.fileSystemManager;
 
             // 1. ADIM: Temel Klasörleri Bul (Hızlı)
-            // Önce AppDataFolder'da saklanan root folder ID'sini kontrol et (Cihazlar arası tutarlılık için)
-            let appFolderId = await this._getAppFolderIdFromConfig();
+            console.log('[CloudSync] Adım 1: Klasörler kontrol ediliyor...');
             
-            if (!appFolderId) {
-                console.log('[CloudSync] Root klasör ID\'si yapılandırmada bulunamadı, aranıyor...');
-                appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
-                if (appFolderId) {
-                    await this._saveAppFolderIdToConfig(appFolderId);
-                }
-            } else {
-                // Kayıtlı ID'nin hala geçerli olduğunu doğrula (trash kontrolü)
-                const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${appFolderId}?fields=id,trashed`, {
-                    headers: { Authorization: `Bearer ${this.gdriveToken}` }
-                });
-                const checkData = await checkRes.json();
-                if (!checkRes.ok || checkData.trashed) {
-                    console.warn('[CloudSync] Kayıtlı root klasör geçersiz veya silinmiş, yeniden oluşturuluyor...');
-                    appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
-                    await this._saveAppFolderIdToConfig(appFolderId);
-                }
-            }
+            // AppDataFolder geçici olarak devre dışı (Hata analizi için)
+            let appFolderId = await this._getOrCreateDriveFolderMinimal(APP_CONFIG.GDRIVE_FOLDER, null);
+            console.log('[CloudSync] Root Klasör ID:', appFolderId);
+            
+            if (!appFolderId) throw new Error('Root klasör oluşturulamadı veya bulunamadı.');
 
             const settingsFolderId = await this._getOrCreateDriveFolderMinimal('.settings', appFolderId);
+            console.log('[CloudSync] Settings Klasör ID:', settingsFolderId);
 
             let syncCount = 0;
 
             // 2. ADIM: Downstream (Drive -> Local)
+            console.log('[CloudSync] Adım 2: Manifest çekiliyor...');
             let remoteManifest = await this._pullManifest(settingsFolderId);
             let isDiscoveryMode = false;
 
-            // Eğer manifest yoksa ama yerel boşsa, Drive'ı "Keşfet" (Eski sürümlerden geçiş için)
+            // Eğer manifest yoksa ama yerel boşsa, Drive'ı "Keşfet"
             if (!remoteManifest && targetId === null) {
                 const localBoards = await fsm.getItem('wb_boards', []);
                 if (localBoards.length === 0) {
@@ -132,25 +138,28 @@ class CloudStorageManager {
             }
 
             if (remoteManifest) {
+                console.log('[CloudSync] Uzak değişiklikler birleştiriliyor...');
                 syncCount += await this._mergeRemoteChanges(remoteManifest, appFolderId, isDiscoveryMode);
             }
 
             // 3. ADIM: Upstream (Local -> Drive)
-            // Discovery sırasında upstream atlanır (çünkü yerel boş kabul edildi)
             if (!isDiscoveryMode) {
+                console.log('[CloudSync] Adım 3: Yerel değişiklikler yükleniyor...');
                 syncCount += await this._pushLocalChanges(appFolderId);
             }
 
-            // 4. ADIM: Manifest Update (Eğer değişiklik varsa)
+            // 4. ADIM: Manifest Update
             if (syncCount > 0) {
+                console.log('[CloudSync] Adım 4: Manifest güncelleniyor...');
                 await this._syncManifest(settingsFolderId);
             }
 
+            console.log('[CloudSync] Senkronizasyon başarıyla tamamlandı. İşlem sayısı:', syncCount);
             return { success: true, message: syncCount > 0 ? `${syncCount} değişiklik işlendi.` : 'Her şey güncel.', syncCount };
 
         } catch (err) {
-            console.error('[CloudSync] Hata:', err);
-            return { success: false, message: err.message };
+            console.error('[CloudSync] Kritik Hata:', err);
+            return { success: false, message: 'Senkronizasyon hatası: ' + err.message };
         } finally {
             if (targetId) this._activeSyncs.delete(targetId); else this.isSyncing = false;
         }
@@ -802,16 +811,20 @@ class CloudStorageManager {
     }
 
     async _uploadRawToDrive(name, bytes, mime, folderId, existingId, appProps = {}) {
-        // Multipart upload yerine Resumable Upload kullanıyoruz (Büyük dosyalar ve iPad senkronizasyon sorunları için)
-        // Bu yöntem 5MB limitine takılmaz ve daha güvenilirdir.
+        // Multipart upload yerine Resumable Upload kullanıyoruz (Büyük dosyalar için)
         const metadata = existingId ? { name, appProperties: appProps } : { name, parents: [folderId], appProperties: appProps };
         
         try {
+            console.log(`[CloudSync] Yükleme başlatılıyor: ${name}`, { existingId });
+            
             // 1. ADIM: Upload session başlat
             const sessionUrl = existingId 
                 ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=resumable` 
                 : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 saniye timeout
+
             const sessionRes = await fetch(sessionUrl, {
                 method: existingId ? 'PATCH' : 'POST',
                 headers: {
@@ -820,8 +833,10 @@ class CloudStorageManager {
                     'X-Upload-Content-Type': mime,
                     'X-Upload-Content-Length': bytes.length
                 },
-                body: JSON.stringify(metadata)
+                body: JSON.stringify(metadata),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (!sessionRes.ok) {
                 const errData = await sessionRes.json();
@@ -830,16 +845,19 @@ class CloudStorageManager {
             }
 
             const uploadUrl = sessionRes.headers.get('Location');
+            console.log(`[CloudSync] Session alındı, veri gönderiliyor: ${name}`);
 
             // 2. ADIM: Binary veriyi gönder
-            // Google Resumable Upload için PUT isteğinde Content-Type zorunludur.
-            // Content-Length başlığını manuel eklemek bazı tarayıcılarda (Forbidden Header) hataya/takılmaya yol açabilir.
-            // Blob kullanıldığında fetch bunu otomatik ve doğru bir şekilde yönetir.
+            const binaryController = new AbortController();
+            const binaryTimeoutId = setTimeout(() => binaryController.abort(), 60000); // 60 saniye timeout
+
             const blob = new Blob([bytes], { type: mime });
             const uploadRes = await fetch(uploadUrl, {
                 method: 'PUT',
-                body: blob // Base64 yok, doğrudan binary transfer
+                body: blob,
+                signal: binaryController.signal
             });
+            clearTimeout(binaryTimeoutId);
 
             if (!uploadRes.ok) {
                 const errData = await uploadRes.json();
@@ -848,10 +866,14 @@ class CloudStorageManager {
             }
 
             const r = await uploadRes.json(); 
+            console.log(`[CloudSync] Yükleme tamamlandı: ${name}, ID: ${r.id}`);
             return r.id;
 
         } catch (err) {
-            console.error('[CloudSync] Resumable upload başarısız, multipart fallback denenmiyor:', err);
+            if (err.name === 'AbortError') {
+                throw new Error(`Yükleme zaman aşımına uğradı: ${name}`);
+            }
+            console.error('[CloudSync] Resumable upload başarısız:', err);
             throw err;
         }
     }
