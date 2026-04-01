@@ -4005,7 +4005,37 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
             }, 3000); // 3 saniye debounce
         };
 
-        // 1. Auto-Push (Debounced Delta Sync)
+        // 1. Bulut Senkronizasyon Butonu (Manuel)
+        const btnManualSync = document.getElementById('btnManualSync');
+        if (btnManualSync) {
+            btnManualSync.onclick = async () => {
+                const cloud = getCloud();
+                if (!cloud.gdriveToken) {
+                    await cloud.signInGoogle();
+                }
+                
+                btnManualSync.classList.add('spinning');
+                Utils.showToast(window.i18n.t('syncing') || 'Senkronize ediliyor...', 'info');
+                
+                try {
+                    const res = await cloud.syncWithGoogleDrive();
+                    if (res.success) {
+                        Utils.showToast(res.message, 'success');
+                        if (res.syncCount > 0) {
+                            await this.initAsync();
+                        }
+                    } else {
+                        Utils.showToast(res.message, 'error');
+                    }
+                } catch (err) {
+                    Utils.showToast('Senkronizasyon hatası: ' + err.message, 'error');
+                } finally {
+                    btnManualSync.classList.remove('spinning');
+                }
+            };
+        }
+
+        // 2. Auto-Push (Debounced Delta Sync)
         window.fileSystemManager.onSave = (key) => {
             if (key.startsWith('wb_content_')) {
                 // Board içeriği değişti: delta sync ile sadece bu board'u yükle
