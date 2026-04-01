@@ -111,6 +111,7 @@
     <!-- Tesseract.js for OCR (Optical Character Recognition) support -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="js/translations.js"></script>
+    <script src="capacitor.js"></script>
 </head>
 
 <body>
@@ -1990,43 +1991,6 @@
                             </p>
                         </div>
 
-                        <!-- ── Bölüm 2: Google Drive (Tüm Platformlar) ── -->
-                        <div id="gdrive-storage-section"
-                            style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
-
-                            <p class="settings-section-label">
-                                <app-icon name="download-cloud-01"
-                                    style="width: 14px; margin-right: 8px; opacity: 0.7;"></app-icon>
-                                Google Drive Senkronizasyonu
-                            </p>
-                            <p
-                                style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
-                                Notlarınızı Google Drive'a yedekleyin veya farklı cihazlardan erişin.
-                            </p>
-
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <button id="btn-gdrive-save" class="btn btn-secondary"
-                                    style="justify-content: center; height: 42px; font-size: 13px; gap: 8px;">
-                                    <app-icon name="Google_Drive_icon"
-                                        style="width: 18px; margin-right: 8px; opacity: 0.7;"></app-icon>
-                                    Buluta Eşitle (Yedekle)
-                                </button>
-                                <button id="btn-gdrive-load" class="btn btn-secondary"
-                                    style="justify-content: center; height: 42px; font-size: 13px; gap: 8px;">
-                                    <app-icon name="Google_Drive_icon"
-                                        style="width: 18px; margin-right: 8px; opacity: 0.7;"></app-icon>
-                                    Buluttan Geri Yükle
-                                </button>
-                                <button id="btn-gdrive-signout" class="btn btn-outline"
-                                    style="justify-content: center; height: 34px; font-size: 11px; display: none;">
-                                    Google hesabından çıkış yap
-                                </button>
-                            </div>
-                            <p id="gdrive-status"
-                                style="font-size: 12px; color: var(--text-secondary); margin-top: 10px; min-height: 18px;">
-                            </p>
-                        </div>
-
                         <!-- ── Bölüm 3: Otomatik Kayıt Ayarları ── -->
                         <div class="form-group"
                             style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 24px;">
@@ -2070,7 +2034,7 @@
                             </div>
                             <h3 style="margin: 10px 0 5px 0;">notencil</h3>
                             <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 30px;">Versiyon
-                                <span id="app-version">1.1.13</span></p>
+                                <span id="app-version">1.2.01</span></p>
 
                             <div class="about-links"
                                 style="display: flex; flex-direction: column; gap: 12px; max-width: 300px; margin: 0 auto;">
@@ -2162,7 +2126,6 @@
     <script src="./templates/isometric-grid.js?v=0.8.0"></script>
     <script src="./templates/meeting-notes.js?v=0.8.0"></script>
     <script src="./js/TemplateManager.js?v=0.8.0"></script>
-    <script src="./js/CloudStorageManager.js?v=0.8.1"></script>
     <script src="./js/Alignment.js?v=0.8.0"></script>
     <script src="./js/app.js?v=0.8.12"></script>
     <!--  PWA Güncelleme Tanımları  -->

@@ -1,0 +1,47 @@
+{
+    "name": "notencil",
+    "short_name": "notencil",
+    "description": "Profesyonel Dijital Beyaz Tahta Uygulaması",
+    "start_url": "index.html",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#ffffff",
+    "theme_color": "#616161",
+    "icons": [
+        {
+            "src": "assets/favicon/favicon.svg",
+            "sizes": "192x192 512x512",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "assets/favicon/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "file_handlers": [
+        {
+            "action": "./",
+            "name": "notencil Notu",
+            "accept": {
+                "application/x-notencil": [".ncil"],
+                "application/notencil": [".ncil"],
+                "application/octet-stream": [".ncil"],
+                "text/plain": [".ncil"]
+            },
+            "icons": [
+                {
+                    "src": "assets/icons/dot-ncil.svg",
+                    "sizes": "any",
+                    "type": "image/svg+xml"
+                }
+            ]
+        }
+    ],
+    "launch_handler": {
+        "client_mode": "focus-existing"
+    },
+    "protocol_handlers": []
+}
