@@ -110,6 +110,44 @@ class NcilExporter {
         return finalData;
     }
 
+    /**
+     * Dışarıdan verilen içeriği optimize ederek serialize eder.
+     * (Senkronizasyon ve OPFS kaydı için kullanılır)
+     */
+    async serializeContent(content, boardId = null) {
+        if (!content) return content;
+        
+        const optimized = Utils.deepClone(content);
+        
+        // Sayfaları optimize et
+        if (optimized.pages) {
+            optimized.pages = optimized.pages.map(page => {
+                delete page.thumbnail;
+                if (page.objects) {
+                    page.objects = page.objects.map(obj => this._serializeObject(obj));
+                }
+                return page;
+            });
+        }
+        
+        // Sayfa olmayan (eski) objeleri optimize et
+        if (optimized.objects) {
+            optimized.objects = optimized.objects.map(obj => this._serializeObject(obj));
+        }
+
+        // PDF verisi eksikse ve boardId varsa DB'den çek
+        if (!optimized.pdfBase64 && boardId) {
+            try {
+                const pdfBlob = await Utils.db.get(boardId);
+                if (pdfBlob instanceof Blob) {
+                    optimized.pdfBase64 = await this._blobToBase64(pdfBlob);
+                }
+            } catch (e) {}
+        }
+
+        return optimized;
+    }
+
     _serializeObject(obj) {
         if (!obj) return obj;
         const o = Object.assign({}, obj);

@@ -2226,11 +2226,11 @@ dropdown.querySelectorAll('.icon-option').forEach(opt => {
                 board.lastModified = now;
                 board.objectCount = (this.app.state.objects || []).length;
 
-                const shouldSaveMeta = force || !board._lastMetaSaveTime || (now - board._lastMetaSaveTime > 30000);
-                if (shouldSaveMeta) {
-                    board._lastMetaSaveTime = now;
-                    boardMetaToSave = [...this.boards];
-                }
+                // Senkronizasyon tutarlılığı için meta veriyi her zaman kaydediyoruz.
+                // Eskiden 30 saniye sınırlaması vardı ancak bu durum cihazlar arası 
+                // manifest senkronizasyonunda gecikmelere/hatalara yol açıyordu.
+                board._lastMetaSaveTime = now;
+                boardMetaToSave = [...this.boards];
             }
 
             // 3. Serializer definition
