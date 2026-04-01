@@ -16,7 +16,8 @@ class CloudStorageManager {
     constructor(app) {
         this.app = app;
         this.GOOGLE_CLIENT_ID = '915367935470-foe1s3qi94pstohb7p2svpbeu2v3oe66.apps.googleusercontent.com';
-        this.GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive';
+        // Cihazlar arası yapılandırma için appdata kapsamı eklendi
+        this.GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.appdata';
         this.DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         
         this.gisLoaded = false;
@@ -364,18 +365,17 @@ class CloudStorageManager {
 
                             if (pdfBlob && pdfBlob instanceof Blob) {
                                 // Drive'da .pdf dosyasını ara
-                                const q = `name='${board.name}.pdf' and '${targetParentId}' in parents and trashed=false`;
-                                const params = new URLSearchParams({ q, fields: 'files(id, modifiedTime)', pageSize: '1' });
-                                const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-                                    headers: { Authorization: `Bearer ${this.gdriveToken}` }
-                                });
-                                const data = await res.json();
-                                const drivePdfFile = data.files?.[0];
-                                const existingPdfId = drivePdfFile?.id;
+                                // FIX: Artık expectRaw=true parametresiyle arıyoruz
+                                const existingPdfId = await this._findFileByBoardId(board.id, targetParentId, true);
 
                                 // ZAMAN KONTROLÜ: Eğer Drive'da yoksa veya yereldeki daha yeniyse yükle
                                 let shouldUploadPdf = true;
                                 if (existingPdfId) {
+                                    // ModifiedTime kontrolü için dosyayı çek
+                                    const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${existingPdfId}?fields=modifiedTime`, {
+                                        headers: { Authorization: `Bearer ${this.gdriveToken}` }
+                                    });
+                                    const drivePdfFile = await metaRes.json();
                                     const driveTime = new Date(drivePdfFile.modifiedTime).getTime();
                                     const localTime = board.lastModified || meta.lastModifiedLocally || 0;
                                     // Sadece Drive'daki kesinlikle daha yeniyse atla
@@ -401,6 +401,7 @@ class CloudStorageManager {
                             // Eğer meta ID'si bir PDF'e işaret ediyorsa, Drive'da bir NCIL var mı diye tekrar kontrol et
                             const isActualNcil = driveFileId ? await this._checkIfFileIsNcil(driveFileId) : false;
                             if (!isActualNcil) {
+                                // FIX: expectRaw=false (varsayılan) ile NCIL ara
                                 const foundNcilId = await this._findFileByBoardId(board.id, targetParentId);
                                 if (foundNcilId) driveFileId = foundNcilId;
                             }
@@ -411,6 +412,7 @@ class CloudStorageManager {
                             // Eğer Drive ID'si yoksa veya bir PDF'e işaret ediyorsa, gerçek NCIL'i bulmaya çalış
                             const isKnownNcil = targetIdForUpload ? await this._checkIfFileIsNcil(targetIdForUpload) : false;
                             if (!isKnownNcil) {
+                                // FIX: expectRaw=false (varsayılan) ile NCIL ara
                                 targetIdForUpload = await this._findFileByBoardId(board.id, targetParentId);
                             }
 
@@ -649,9 +651,19 @@ class CloudStorageManager {
         return f.id;
     }
 
-    async _findFileByBoardId(boardId, parentId = null) {
+    async _findFileByBoardId(boardId, parentId = null, expectRaw = false) {
         try {
-            const q = `appProperties has { key='boardId' and value='${boardId}' } and trashed=false${parentId ? ` and '${parentId}' in parents` : ''}`;
+            let q = `appProperties has { key='boardId' and value='${boardId}' } and trashed=false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
+            
+            // Raw PDF mi yoksa NCIL mi arıyoruz?
+            if (expectRaw) {
+                q += ` and appProperties has { key='isRaw' and value='true' }`;
+            } else {
+                // NCIL ararken isRaw=true olanları ele
+                q += ` and not appProperties has { key='isRaw' and value='true' }`;
+            }
+
             const params = new URLSearchParams({ q, fields: 'files(id)', pageSize: '1' });
             const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
                 headers: { Authorization: `Bearer ${this.gdriveToken}` }
@@ -788,9 +800,16 @@ class CloudStorageManager {
             const uploadUrl = sessionRes.headers.get('Location');
 
             // 2. ADIM: Binary veriyi gönder
+            // Google Resumable Upload için PUT isteğinde Content-Length ve Content-Type zorunludur.
+            // Blob kullanımı tarayıcı uyumluluğu ve veri bütünlüğü için daha güvenlidir.
+            const blob = new Blob([bytes], { type: mime });
             const uploadRes = await fetch(uploadUrl, {
                 method: 'PUT',
-                body: bytes // Base64 yok, doğrudan binary transfer
+                headers: {
+                    'Content-Type': mime,
+                    'Content-Length': blob.size.toString()
+                },
+                body: blob // Base64 yok, doğrudan binary transfer
             });
 
             if (!uploadRes.ok) {
